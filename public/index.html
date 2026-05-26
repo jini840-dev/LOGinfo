@@ -32,12 +32,40 @@
     </div>
 </div>
 
+<script src="diff-engine.bundle.js"></script>
 <script>
     async function loadResults() {
         try {
-            const response = await fetch('/api/compare');
-            const data = await response.json();
-            renderResults(data);
+            // 정적 JSON 파일 로드
+            const [qaRes, devRes] = await Promise.all([
+                fetch('/data/qa_data.json'),
+                fetch('/data/dev_data.json')
+            ]);
+            
+            const qaBlocks = await qaRes.json();
+            const devBlocks = await devRes.json();
+            
+            const ignoreKeys = ['trnnNo', 'tlgrCretDttm', 'rqstDttm', 'ipAddr', 'rqsrIp', 'ctfnTokn', 'mciNodeNo'];
+            const limit = Math.min(qaBlocks.length, devBlocks.length);
+            const results = [];
+
+            for (let i = 0; i < limit; i++) {
+                const qa = qaBlocks[i];
+                const dev = devBlocks[i];
+                // 번들링된 diffEngine 사용
+                const diffs = window.diffEngine.getDiff(qa, dev, ignoreKeys);
+                
+                results.push({
+                    id: i + 1,
+                    serviceId: qa.header?.rcveSrvcId || 'Unknown',
+                    qa,
+                    dev,
+                    diffs,
+                    status: diffs.length === 0 ? 'MATCH' : 'MISMATCH'
+                });
+            }
+
+            renderResults(results);
         } catch (e) {
             document.getElementById('results').innerHTML = `<div class="alert alert-danger">에러 발생: ${e.message}</div>`;
         }
@@ -75,8 +103,8 @@
                             ${res.diffs.map(d => `
                                 <li class="list-group-item list-group-item-warning">
                                     <strong>Path:</strong> ${d.path}<br>
-                                    <span class="text-danger">- QA: ${JSON.stringify(d.oldValue)}</span><br>
-                                    <span class="text-success">+ Dev: ${JSON.stringify(d.newValue)}</span>
+                                    <span class="text-danger">- QA: ${JSON.stringify(d.oldValue !== undefined ? d.oldValue : "N/A")}</span><br>
+                                    <span class="text-success">+ Dev: ${JSON.stringify(d.newValue !== undefined ? d.newValue : "N/A")}</span>
                                 </li>
                             `).join('')}
                         </ul>

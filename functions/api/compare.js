@@ -1,26 +1,36 @@
 // Cloudflare Pages Function: /functions/api/compare.js
 
 /**
- * Deep Diff Engine (Pure JS version for Cloudflare Workers)
+ * 객체인지 확인하는 유틸리티
+ */
+function isObject(item) {
+  return (item && typeof item === 'object' && !Array.isArray(item));
+}
+
+/**
+ * Deep Diff Engine (Pure JS - No dependencies)
  */
 function getDiff(obj1, obj2, ignoreKeys = [], path = '') {
   const diffs = [];
   
-  if (JSON.stringify(obj1) === JSON.stringify(obj2)) return diffs;
+  // 기본 값 비교 (문자열, 숫자 등)
+  if (obj1 === obj2) return diffs;
 
-  if (typeof obj1 !== 'object' || obj1 === null || typeof obj2 !== 'object' || obj2 === null) {
-    if (obj1 !== obj2) {
-      diffs.push({ path, type: 'CHANGED', oldValue: obj1, newValue: obj2 });
-    }
+  // 타입이 다르거나 하나가 객체가 아닌 경우
+  if (!isObject(obj1) || !isObject(obj2)) {
+    diffs.push({ path, type: 'CHANGED', oldValue: obj1, newValue: obj2 });
     return diffs;
   }
 
+  // 모든 키 합집합
   const keys1 = Object.keys(obj1);
   const keys2 = Object.keys(obj2);
   const allKeys = Array.from(new Set([...keys1, ...keys2]));
 
   for (const key of allKeys) {
     const currentPath = path ? `${path}.${key}` : key;
+    
+    // 무시할 키 체크 (단순 키 이름 또는 전체 경로)
     if (ignoreKeys.includes(key) || ignoreKeys.includes(currentPath)) continue;
 
     if (!(key in obj1)) {
@@ -28,8 +38,21 @@ function getDiff(obj1, obj2, ignoreKeys = [], path = '') {
     } else if (!(key in obj2)) {
       diffs.push({ path: currentPath, type: 'DELETED', oldValue: obj1[key], newValue: undefined });
     } else {
-      const deepDiffs = getDiff(obj1[key], obj2[key], ignoreKeys, currentPath);
-      diffs.push(...deepDiffs);
+      // 재귀적으로 깊은 비교
+      const val1 = obj1[key];
+      const val2 = obj2[key];
+      
+      if (isObject(val1) && isObject(val2)) {
+        const deepDiffs = getDiff(val1, val2, ignoreKeys, currentPath);
+        diffs.push(...deepDiffs);
+      } else if (Array.isArray(val1) && Array.isArray(val2)) {
+        // 배열 비교 (단순화를 위해 JSON 문자열 비교 후 다르면 전체 표시)
+        if (JSON.stringify(val1) !== JSON.stringify(val2)) {
+          diffs.push({ path: currentPath, type: 'CHANGED', oldValue: val1, newValue: val2 });
+        }
+      } else if (val1 !== val2) {
+        diffs.push({ path: currentPath, type: 'CHANGED', oldValue: val1, newValue: val2 });
+      }
     }
   }
 
@@ -77,8 +100,7 @@ export async function onRequest(context) {
     if (!qaRes.ok || !devRes.ok) {
       return new Response(JSON.stringify({ 
         error: '로그 파일을 찾을 수 없습니다.',
-        qaStatus: qaRes.status,
-        devStatus: devRes.status
+        details: `QA: ${qaRes.status}, Dev: ${devRes.status}`
       }), { 
         status: 404,
         headers: { 'Content-Type': 'application/json' }

@@ -6,68 +6,49 @@
     <title>Cross-Environment Diff Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; }
-        .diff-container { font-family: monospace; font-size: 13px; white-space: pre-wrap; padding: 15px; border-radius: 5px; height: 500px; overflow-y: auto; }
-        .qa-view { background-color: #fff; border: 1px solid #dee2e6; }
-        .dev-view { background-color: #fff; border: 1px solid #dee2e6; }
-        .highlight-change { background-color: #fff3cd; border: 1px solid #ffeeba; }
-        .badge-match { background-color: #d4edda; color: #155724; }
-        .badge-mismatch { background-color: #f8d7da; color: #721c24; }
-        .diff-item { margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+        body { background-color: #f1f3f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .diff-container { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; white-space: pre-wrap; padding: 15px; border-radius: 8px; height: 450px; overflow-y: auto; background-color: #ffffff; border: 1px solid #dee2e6; }
+        .badge-match { background-color: #e9f7ef; color: #1e7e34; border: 1px solid #c3e6cb; }
+        .badge-mismatch { background-color: #fdf2f2; color: #dc3545; border: 1px solid #f5c6cb; }
+        .diff-item { margin-bottom: 30px; border: none; border-radius: 12px; }
+        .service-id { font-weight: 700; color: #495057; }
+        .business-key { font-size: 0.9rem; color: #6c757d; }
+        .diff-path { font-weight: 600; color: #e83e8c; }
+        .old-val { color: #d63384; text-decoration: line-through; }
+        .new-val { color: #198754; font-weight: 600; }
+        header { background: linear-gradient(135deg, #007bff 0%, #6610f2 100%); color: white; padding: 40px 0; margin-bottom: 30px; border-radius: 0 0 20px 20px; }
     </style>
 </head>
 <body>
-<div class="container-fluid py-4">
-    <header class="mb-4">
-        <h2>🚀 Cross-Environment Diff Dashboard</h2>
-        <p class="text-muted">QA 환경과 Dev 환경의 API 결과를 실시간 비교합니다.</p>
-    </header>
+<header class="shadow-sm">
+    <div class="container text-center">
+        <h1 class="display-5 fw-bold">🔍 Diff & Validation Engine</h1>
+        <p class="lead">QA와 Dev 환경 간의 데이터 정합성을 분석합니다.</p>
+    </div>
+</header>
 
+<div class="container py-2">
     <div id="results">
-        <!-- 결과가 여기에 렌더링됩니다 -->
         <div class="text-center py-5">
-            <div class="spinner-border text-primary" role="status"></div>
-            <p>데이터를 분석 중입니다...</p>
+            <div class="spinner-grow text-primary" role="status"></div>
+            <p class="mt-3 text-muted">로그 데이터를 대조 분석 중입니다...</p>
         </div>
     </div>
 </div>
 
-<script src="diff-engine.bundle.js"></script>
 <script>
     async function loadResults() {
         try {
-            // 정적 JSON 파일 로드
-            const [qaRes, devRes] = await Promise.all([
-                fetch('/data/qa_data.json'),
-                fetch('/data/dev_data.json')
-            ]);
-            
-            const qaBlocks = await qaRes.json();
-            const devBlocks = await devRes.json();
-            
-            const ignoreKeys = ['trnnNo', 'tlgrCretDttm', 'rqstDttm', 'ipAddr', 'rqsrIp', 'ctfnTokn', 'mciNodeNo'];
-            const limit = Math.min(qaBlocks.length, devBlocks.length);
-            const results = [];
-
-            for (let i = 0; i < limit; i++) {
-                const qa = qaBlocks[i];
-                const dev = devBlocks[i];
-                // 번들링된 diffEngine 사용
-                const diffs = window.diffEngine.getDiff(qa, dev, ignoreKeys);
-                
-                results.push({
-                    id: i + 1,
-                    serviceId: qa.header?.rcveSrvcId || 'Unknown',
-                    qa,
-                    dev,
-                    diffs,
-                    status: diffs.length === 0 ? 'MATCH' : 'MISMATCH'
-                });
-            }
-
+            const response = await fetch('/api/compare');
+            const results = await response.json();
             renderResults(results);
         } catch (e) {
-            document.getElementById('results').innerHTML = `<div class="alert alert-danger">에러 발생: ${e.message}</div>`;
+            document.getElementById('results').innerHTML = `
+                <div class="alert alert-danger shadow-sm">
+                    <h4 class="alert-heading">데이터 로드 실패</h4>
+                    <p>서버 통신 중 오류가 발생했습니다: ${e.message}</p>
+                </div>
+            `;
         }
     }
 
@@ -75,41 +56,53 @@
         const container = document.getElementById('results');
         container.innerHTML = '';
 
+        if (results.length === 0) {
+            container.innerHTML = '<div class="alert alert-info text-center">비교할 로그 데이터가 없습니다.</div>';
+            return;
+        }
+
         results.forEach(res => {
             const diffHtml = `
-                <div class="diff-item card shadow-sm p-3 mb-4">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0">#${res.id} Service: <span class="text-primary">${res.serviceId}</span></h5>
-                        <span class="badge ${res.status === 'MATCH' ? 'badge-match text-success' : 'badge-mismatch text-danger'} p-2 border">
+                <div class="diff-item card shadow-sm mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                        <div>
+                            <div class="service-id">Service: ${res.serviceId}</div>
+                            <div class="business-key">Key: ${res.businessKey || 'N/A'}</div>
+                        </div>
+                        <span class="badge ${res.status === 'MATCH' ? 'badge-match' : 'badge-mismatch'} px-3 py-2">
                             ${res.status}
                         </span>
                     </div>
                     
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h6>QA Environment</h6>
-                            <div class="diff-container qa-view">${JSON.stringify(res.qa, null, 2)}</div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-lg-6">
+                                <h6 class="text-muted mb-2 small uppercase fw-bold">QA ENV</h6>
+                                <div class="diff-container">${JSON.stringify(res.qa, null, 2)}</div>
+                            </div>
+                            <div class="col-lg-6">
+                                <h6 class="text-muted mb-2 small uppercase fw-bold">DEV ENV</h6>
+                                <div class="diff-container">${res.dev ? JSON.stringify(res.dev, null, 2) : '<p class="text-danger">MATCHING BLOCK MISSING</p>'}</div>
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <h6>Dev Environment</h6>
-                            <div class="diff-container dev-view">${JSON.stringify(res.dev, null, 2)}</div>
-                        </div>
-                    </div>
 
-                    ${res.diffs.length > 0 ? `
-                    <div class="mt-3">
-                        <h6>Differences Found:</h6>
-                        <ul class="list-group">
-                            ${res.diffs.map(d => `
-                                <li class="list-group-item list-group-item-warning">
-                                    <strong>Path:</strong> ${d.path}<br>
-                                    <span class="text-danger">- QA: ${JSON.stringify(d.oldValue !== undefined ? d.oldValue : "N/A")}</span><br>
-                                    <span class="text-success">+ Dev: ${JSON.stringify(d.newValue !== undefined ? d.newValue : "N/A")}</span>
-                                </li>
-                            `).join('')}
-                        </ul>
+                        ${res.diffs.length > 0 ? `
+                        <div class="mt-4 border-top pt-3">
+                            <h6 class="mb-3"><span class="badge bg-warning text-dark">Detected Differences</span></h6>
+                            <div class="list-group list-group-flush border rounded">
+                                ${res.diffs.map(d => `
+                                    <div class="list-group-item bg-light">
+                                        <div class="diff-path mb-1">${d.path}</div>
+                                        <div class="row small">
+                                            <div class="col-sm-6 text-danger">QA: ${JSON.stringify(d.oldValue)}</div>
+                                            <div class="col-sm-6 text-success">Dev: ${JSON.stringify(d.newValue)}</div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
                     </div>
-                    ` : ''}
                 </div>
             `;
             container.innerHTML += diffHtml;

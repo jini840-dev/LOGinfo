@@ -114,12 +114,6 @@
 
     <!-- Main Content -->
     <div class="content-area">
-        <div id="content-placeholder" class="h-100 d-flex flex-column align-items-center justify-content-center text-muted text-center p-4">
-            <div class="mb-3" style="font-size: 3rem;">📄</div>
-            <h5>비교할 DTO를 목록에서 선택해 주세요.</h5>
-            <p class="small">고유 키를 기반으로 자동 정렬됩니다.</p>
-        </div>
-        
         <div id="comparison-main" class="h-100 d-flex flex-column" style="display: none !important;">
             <div class="content-header d-flex justify-content-between align-items-center">
                 <div class="d-flex align-items-center">
@@ -196,7 +190,7 @@
         document.querySelectorAll('.list-group-item').forEach((el, i) => {
             el.classList.toggle('active', i === index);
         });
-        document.getElementById('content-placeholder').style.display = 'none';
+        
         const main = document.getElementById('comparison-main');
         main.style.setProperty('display', 'flex', 'important');
 

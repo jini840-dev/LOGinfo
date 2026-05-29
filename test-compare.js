@@ -22,7 +22,8 @@ if (qaBlocks.length > 0 && devBlocks.length > 0) {
     'ipAddr', 
     'rqsrIp', 
     'ctfnTokn',
-    'mciNodeNo'
+    'mciNodeNo',
+    'Suid'
   ];
 
   console.log('\n--- Comparing first blocks ---');

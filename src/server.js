@@ -33,7 +33,8 @@ app.get('/api/compare', (req, res) => {
     'ctfnTokn', 'mciNodeNo', 'tlgrRspnDttm', 'mciSesnId',
     'lastModifiedDate', 'stateStartDateTime', 'id',
     'serverType', 'userTmunIdnfVal', 'ctfnTokn', 'ipAddr',
-    'tlgrCretDttm', 'rqstDttm', 'tlgrRspnDttm', 'mciNodeNo'
+    'tlgrCretDttm', 'rqstDttm', 'tlgrRspnDttm', 'mciNodeNo',
+    'Suid'
   ];
 
   const results = qaBlocks.map((qa, idx) => {

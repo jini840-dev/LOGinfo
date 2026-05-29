@@ -18,32 +18,36 @@
             --primary-gradient: linear-gradient(135deg, #212529 0%, #495057 100%);
         }
 
-        body { background-color: var(--bg-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #212529; }
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        body { background-color: var(--bg-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #212529; display: flex; flex-direction: column; }
         
-        header { background: var(--primary-gradient); color: white; padding: 30px 0; margin-bottom: 0; border-radius: 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        header { background: var(--primary-gradient); color: white; padding: 25px 0; flex-shrink: 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         
-        .main-container { height: calc(100vh - 120px); overflow: hidden; display: flex; }
+        .main-container { flex: 1; display: flex; overflow: hidden; }
         
         /* Sidebar Navigation */
-        .sidebar { width: 300px; background: white; border-right: 1px solid var(--border-color); overflow-y: auto; padding: 0; }
+        .sidebar { width: 320px; background: white; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
+        #sidebar-list-container { flex: 1; overflow-y: auto; }
+        
         .list-group-item { border: none; padding: 12px 20px; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; border-left: 4px solid transparent; }
         .list-group-item:hover { background-color: #f1f3f5; }
         .list-group-item.active { background-color: #e9ecef !important; color: #000 !important; font-weight: 700; border-left-color: #212529; }
-        .dto-meta { font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px; }
+        .dto-meta { font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         
         /* Content Area */
         .content-area { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: white; }
-        .content-header { padding: 15px 30px; border-bottom: 1px solid var(--border-color); background: #fff; z-index: 10; }
+        .content-header { padding: 15px 30px; border-bottom: 1px solid var(--border-color); background: #fff; flex-shrink: 0; }
         .comparison-viewport { flex: 1; display: flex; overflow: hidden; }
         
         /* Tree View Panels */
-        .tree-panel { flex: 1; overflow-y: auto; padding: 20px 30px; border-right: 1px solid var(--border-color); position: relative; }
+        .tree-panel { flex: 1; overflow-y: auto; padding: 20px 30px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
         .tree-panel:last-child { border-right: none; }
-        .env-label { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: var(--text-muted); margin-bottom: 15px; letter-spacing: 1px; position: sticky; top: 0; background: white; padding: 5px 0; display: block; }
+        .env-label { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: var(--text-muted); margin-bottom: 15px; letter-spacing: 1px; position: sticky; top: 0; background: white; padding: 5px 0; display: block; z-index: 5; }
+        .tree-container { flex: 1; min-height: min-content; }
 
         /* Tree Structure */
         .tree-node { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; line-height: 1.6; margin-left: 20px; border-left: 1px solid #eee; padding-left: 10px; }
-        .tree-leaf { margin-bottom: 2px; padding: 2px 8px; border-radius: 4px; transition: background-color 0.1s; display: block; }
+        .tree-leaf { margin-bottom: 2px; padding: 2px 8px; border-radius: 4px; transition: background-color 0.1s; display: block; word-break: break-all; }
         .tree-leaf:hover { background-color: rgba(0,0,0,0.03); }
         .key { font-weight: 600; color: #495057; margin-right: 8px; }
         .val { color: var(--text-muted); }
@@ -58,6 +62,7 @@
         
         .badge-match { background-color: #e9f7ef; color: #1e7e34; border: 1px solid #c3e6cb; font-size: 0.7rem; }
         .badge-mismatch { background-color: #fdf2f2; color: #dc3545; border: 1px solid #f5c6cb; font-size: 0.7rem; }
+        .badge-orphan { background-color: #f8f9fa; color: #6c757d; border: 1px solid var(--border-color); font-size: 0.7rem; }
 
         /* Scrollbar Style */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -84,12 +89,12 @@
                 <span class="me-2">📁</span> 로그 파일 업로드
             </h6>
             <div class="mb-2">
-                <label class="form-label small mb-1 text-muted">QA Log (AS-IS)</label>
-                <input type="file" id="upload-qa" class="form-control form-control-sm" accept=".txt,.log">
+                <label class="form-label small mb-1 text-muted">Dev Log (AS-IS)</label>
+                <input type="file" id="upload-dev" class="form-control form-control-sm" accept=".txt,.log">
             </div>
             <div class="mb-3">
-                <label class="form-label small mb-1 text-muted">Dev Log (TO-BE)</label>
-                <input type="file" id="upload-dev" class="form-control form-control-sm" accept=".txt,.log">
+                <label class="form-label small mb-1 text-muted">QA Log (TO-BE)</label>
+                <input type="file" id="upload-qa" class="form-control form-control-sm" accept=".txt,.log">
             </div>
             <button class="btn btn-dark btn-sm w-100 fw-bold" onclick="processUploadedFiles()">비교 실행하기</button>
             <div id="upload-status" class="small mt-2 text-center" style="display:none;"></div>
@@ -102,7 +107,7 @@
         <div id="sidebar-list-container">
             <div class="text-center py-5" id="sidebar-loader">
                 <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
-                <p class="small text-muted mt-2">데이터를 불러오는 중...</p>
+                <p class="small text-muted mt-2">파일을 업로드해 주세요.</p>
             </div>
         </div>
     </div>
@@ -112,23 +117,26 @@
         <div id="content-placeholder" class="h-100 d-flex flex-column align-items-center justify-content-center text-muted text-center p-4">
             <div class="mb-3" style="font-size: 3rem;">📄</div>
             <h5>비교할 DTO를 목록에서 선택해 주세요.</h5>
-            <p class="small">상단 업로드 버튼을 통해 로그 파일을 직접 분석할 수 있습니다.</p>
+            <p class="small">고유 키를 기반으로 자동 정렬됩니다.</p>
         </div>
         
         <div id="comparison-main" class="h-100 d-flex flex-column" style="display: none !important;">
             <div class="content-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold" id="current-srvc-id">Service ID</h5>
+                <div class="d-flex align-items-center">
+                    <h5 class="mb-0 fw-bold me-3" id="current-srvc-id">Service ID</h5>
+                    <span id="current-biz-key" class="badge bg-light text-dark border small fw-normal">Key</span>
+                </div>
                 <span id="current-status-badge" class="badge rounded-pill">Status</span>
             </div>
             
             <div class="comparison-viewport">
-                <div class="tree-panel" id="panel-qa">
-                    <span class="env-label">QA Environment (AS-IS)</span>
-                    <div id="tree-qa-root"></div>
-                </div>
                 <div class="tree-panel" id="panel-dev">
-                    <span class="env-label">Dev Environment (TO-BE)</span>
-                    <div id="tree-dev-root"></div>
+                    <span class="env-label">Dev Environment (AS-IS)</span>
+                    <div class="tree-container" id="tree-dev-root"></div>
+                </div>
+                <div class="tree-panel" id="panel-qa">
+                    <span class="env-label">QA Environment (TO-BE)</span>
+                    <div class="tree-container" id="tree-qa-root"></div>
                 </div>
             </div>
         </div>
@@ -147,7 +155,6 @@
         'tlgrCretDttm', 'rqstDttm', 'tlgrRspnDttm', 'mciNodeNo'
     ];
 
-    // Load Data from Server (Optional)
     async function init() {
         try {
             const response = await fetch('/api/compare');
@@ -156,8 +163,6 @@
             renderSidebar();
         } catch (e) {
             console.warn('API data loading failed, waiting for manual upload.', e);
-            document.getElementById('sidebar-list-container').innerHTML = 
-                '<div class="p-4 text-center text-muted small">서버 데이터를 불러올 수 없습니다.<br>로그 파일을 업로드해 주세요.</div>';
         }
     }
 
@@ -170,10 +175,16 @@
             const btn = document.createElement('button');
             btn.className = 'list-group-item list-group-item-action';
             btn.onclick = () => selectDto(index);
+            
+            let statusBadge = '';
+            if (item.status === 'MATCH') statusBadge = '<span class="badge badge-match">MATCH</span>';
+            else if (item.status === 'ORPHAN') statusBadge = '<span class="badge badge-orphan">ORPHAN</span>';
+            else statusBadge = '<span class="badge badge-mismatch">MISMATCH</span>';
+
             btn.innerHTML = `
                 <div class="d-flex justify-content-between align-items-start">
-                    <span>DTO #${item.id}</span>
-                    <span class="badge ${item.status === 'MATCH' ? 'badge-match' : 'badge-mismatch'}">${item.status}</span>
+                    <span class="fw-bold text-truncate" style="max-width: 150px;">${item.bizKey || 'Block #' + item.id}</span>
+                    ${statusBadge}
                 </div>
                 <span class="dto-meta">${item.serviceId}</span>
             `;
@@ -191,24 +202,28 @@
 
         const data = comparisonData[index];
         document.getElementById('current-srvc-id').innerText = data.serviceId;
+        document.getElementById('current-biz-key').innerText = data.bizKey || 'No Business Key';
+        
         const badge = document.getElementById('current-status-badge');
         badge.innerText = data.status;
-        badge.className = `badge rounded-pill ${data.status === 'MATCH' ? 'badge-match' : 'badge-mismatch'}`;
+        if (data.status === 'MATCH') badge.className = 'badge rounded-pill badge-match';
+        else if (data.status === 'ORPHAN') badge.className = 'badge rounded-pill badge-orphan';
+        else badge.className = 'badge rounded-pill badge-mismatch';
 
         const qaRoot = document.getElementById('tree-qa-root');
         const devRoot = document.getElementById('tree-dev-root');
         qaRoot.innerHTML = '';
         devRoot.innerHTML = '';
 
-        renderTree(data.qa, data.diffs, '', qaRoot, 'QA');
         renderTree(data.dev, data.diffs, '', devRoot, 'DEV');
+        renderTree(data.qa, data.diffs, '', qaRoot, 'QA');
 
         setupScrollSync();
     }
 
     function renderTree(obj, diffs, path, container, env) {
         if (obj === null || obj === undefined) {
-            container.innerHTML = `<div class="text-muted italic p-2">${env === 'DEV' ? '데이터가 존재하지 않습니다.' : '데이터 없음'}</div>`;
+            container.innerHTML = `<div class="text-muted italic p-4 text-center">데이터가 존재하지 않습니다.</div>`;
             return;
         }
 
@@ -216,7 +231,7 @@
             const keys = Object.keys(obj);
             keys.forEach(key => {
                 const currentPath = path ? `${path}.${key}` : key;
-                const diff = diffs.find(d => d.path === currentPath);
+                const diff = diffs ? diffs.find(d => d.path === currentPath) : null;
                 
                 const node = document.createElement('div');
                 node.className = 'tree-node';
@@ -224,8 +239,8 @@
                 const leaf = document.createElement('div');
                 leaf.className = 'tree-leaf';
                 if (diff) {
-                    if (diff.type === 'ADDED' && env === 'DEV') leaf.classList.add('diff-added');
-                    if (diff.type === 'REMOVED' && env === 'QA') leaf.classList.add('diff-removed');
+                    if (diff.type === 'ADDED' && env === 'QA') leaf.classList.add('diff-added');
+                    if (diff.type === 'REMOVED' && env === 'DEV') leaf.classList.add('diff-removed');
                     if (diff.type === 'CHANGED') leaf.classList.add('diff-changed');
                 }
 
@@ -243,7 +258,7 @@
         } else if (Array.isArray(obj)) {
             obj.forEach((item, index) => {
                 const currentPath = path ? `${path}.${index}` : `${index}`;
-                const diff = diffs.find(d => d.path === currentPath);
+                const diff = diffs ? diffs.find(d => d.path === currentPath) : null;
                 
                 const node = document.createElement('div');
                 node.className = 'tree-node';
@@ -251,8 +266,8 @@
                 const leaf = document.createElement('div');
                 leaf.className = 'tree-leaf';
                 if (diff) {
-                    if (diff.type === 'ADDED' && env === 'DEV') leaf.classList.add('diff-added');
-                    if (diff.type === 'REMOVED' && env === 'QA') leaf.classList.add('diff-removed');
+                    if (diff.type === 'ADDED' && env === 'QA') leaf.classList.add('diff-added');
+                    if (diff.type === 'REMOVED' && env === 'DEV') leaf.classList.add('diff-removed');
                     if (diff.type === 'CHANGED') leaf.classList.add('diff-changed');
                 }
 
@@ -270,35 +285,70 @@
     }
 
     function setupScrollSync() {
-        const left = document.getElementById('panel-qa');
-        const right = document.getElementById('panel-dev');
+        const devPanel = document.getElementById('panel-dev');
+        const qaPanel = document.getElementById('panel-qa');
 
         const sync = (source, target) => {
             if (isSyncing) return;
             isSyncing = true;
-            const percentage = source.scrollTop / (source.scrollHeight - source.clientHeight);
-            target.scrollTop = percentage * (target.scrollHeight - target.clientHeight);
-            setTimeout(() => { isSyncing = false; }, 20);
+            
+            const maxScrollSource = source.scrollHeight - source.clientHeight;
+            const maxScrollTarget = target.scrollHeight - target.clientHeight;
+            
+            if (maxScrollSource > 0) {
+                const percentage = source.scrollTop / maxScrollSource;
+                target.scrollTop = percentage * maxScrollTarget;
+            }
+            
+            setTimeout(() => { isSyncing = false; }, 30);
         };
 
-        left.onscroll = () => sync(left, right);
-        right.onscroll = () => sync(right, left);
+        devPanel.onscroll = () => sync(devPanel, qaPanel);
+        qaPanel.onscroll = () => sync(qaPanel, devPanel);
     }
 
-    // --- File Processing Logic ---
+    // --- High-Performance File Processing & Matching ---
+
+    function findBusinessKey(obj) {
+        if (!obj) return null;
+        const candidates = ['contractNo', 'polyNo', 'id', 'key', 'custId', 'trnnNo', 'srvcId', 'uuid'];
+        
+        // 1. Top level search
+        for (const k of candidates) {
+            if (obj[k] !== undefined && obj[k] !== null) return String(obj[k]);
+        }
+        
+        // 2. Nested search (header, payload, data)
+        const sub = ['header', 'payload', 'data', 'dto'];
+        for (const s of sub) {
+            if (obj[s] && typeof obj[s] === 'object') {
+                for (const k of candidates) {
+                    if (obj[s][k] !== undefined && obj[s][k] !== null) return String(obj[s][k]);
+                }
+            }
+        }
+        return null;
+    }
+
+    function mapBlocksByKey(blocks) {
+        const map = new Map();
+        const counts = new Map();
+        
+        blocks.forEach((block) => {
+            let key = findBusinessKey(block) || "UNKNOWN";
+            counts.set(key, (counts.get(key) || 0) + 1);
+            const uniqueKey = `${key}__${counts.get(key)}`;
+            map.set(uniqueKey, block);
+        });
+        return map;
+    }
 
     function parseLogsFromContent(content) {
         const jsonBlocks = [];
         const regex = /\[data=({[\s\S]*?}),\s*encrypt=false\]/g;
         let match;
-
         while ((match = regex.exec(content)) !== null) {
-            try {
-                const jsonStr = match[1];
-                jsonBlocks.push(JSON.parse(jsonStr));
-            } catch (e) {
-                console.warn('Failed to parse JSON block', e);
-            }
+            try { jsonBlocks.push(JSON.parse(match[1])); } catch (e) {}
         }
         return jsonBlocks;
     }
@@ -327,60 +377,72 @@
     }
 
     async function readFileAsText(file) {
-        return new Promise((resolve, reject) => {
+        return new Promise((r, j) => {
             const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
+            reader.onload = () => r(reader.result);
+            reader.onerror = j;
             reader.readAsText(file);
         });
     }
 
     async function processUploadedFiles() {
-        const qaFile = document.getElementById('upload-qa').files[0];
         const devFile = document.getElementById('upload-dev').files[0];
+        const qaFile = document.getElementById('upload-qa').files[0];
         const statusEl = document.getElementById('upload-status');
 
-        if (!qaFile || !devFile) {
-            alert('QA 로그와 Dev 로그 파일을 모두 선택해 주세요.');
+        if (!devFile || !qaFile) {
+            alert('Dev 로그와 QA 로그 파일을 모두 선택해 주세요.');
             return;
         }
 
         statusEl.style.display = 'block';
         statusEl.className = 'small mt-2 text-center text-primary';
-        statusEl.innerText = '파일 분석 중...';
+        statusEl.innerText = '비즈니스 키 분석 및 매칭 중...';
 
         try {
-            const qaContent = await readFileAsText(qaFile);
             const devContent = await readFileAsText(devFile);
+            const qaContent = await readFileAsText(qaFile);
 
-            const qaBlocks = parseLogsFromContent(qaContent);
-            const devBlocks = parseLogsFromContent(devContent);
+            const devBlocksRaw = parseLogsFromContent(devContent);
+            const qaBlocksRaw = parseLogsFromContent(qaContent);
 
-            if (qaBlocks.length === 0) {
-                throw new Error('QA 로그에서 유효한 데이터를 찾을 수 없습니다.');
-            }
+            const devMap = mapBlocksByKey(devBlocksRaw);
+            const qaMap = mapBlocksByKey(qaBlocksRaw);
 
-            comparisonData = qaBlocks.map((qa, idx) => {
-                const dev = devBlocks[idx] || null;
-                const diffs = dev ? getDiff(qa, dev, ignoreKeys) : [{ path: 'root', type: 'REMOVED', oldValue: 'BLOCK_MISSING_IN_DEV' }];
+            const allKeys = _.union(Array.from(devMap.keys()), Array.from(qaMap.keys()));
+            
+            comparisonData = allKeys.map((uniqueKey, idx) => {
+                const dev = devMap.get(uniqueKey) || null;
+                const qa = qaMap.get(uniqueKey) || null;
+                const bizKey = uniqueKey.split('__')[0];
                 
+                let diffs = [];
+                let status = 'MATCH';
+
+                if (dev && qa) {
+                    diffs = getDiff(dev, qa, ignoreKeys);
+                    status = diffs.length === 0 ? 'MATCH' : 'MISMATCH';
+                } else {
+                    status = 'ORPHAN';
+                    diffs = dev ? [{path: 'root', type: 'REMOVED'}] : [{path: 'root', type: 'ADDED'}];
+                }
+
                 return {
                     id: idx + 1,
-                    serviceId: qa.header?.rcveSrvcId || `Log Block #${idx + 1}`,
-                    qa,
+                    bizKey: bizKey !== 'UNKNOWN' ? bizKey : `Block #${idx+1}`,
+                    serviceId: (qa?.header?.rcveSrvcId) || (dev?.header?.rcveSrvcId) || 'Unknown Service',
                     dev,
+                    qa,
                     diffs,
-                    status: (dev && diffs.length === 0) ? 'MATCH' : 'MISMATCH'
+                    status
                 };
             });
 
             renderSidebar();
             statusEl.className = 'small mt-2 text-center text-success';
-            statusEl.innerText = `분석 완료: ${qaBlocks.length}건`;
-            
-            if (comparisonData.length > 0) {
-                selectDto(0);
-            }
+            statusEl.innerText = `매칭 완료: ${comparisonData.length}건`;
+            if (comparisonData.length > 0) selectDto(0);
+
         } catch (e) {
             console.error(e);
             statusEl.className = 'small mt-2 text-center text-danger';

@@ -64,26 +64,17 @@ function getDiff(obj1, obj2, ignoreKeys = [], path = '') {
  */
 function parseLogs(content) {
   const jsonBlocks = [];
-  const regex = /MessageLogData \[data=([\s\S]*?)\}, encrypt=/g;
+  // "data={" 로 시작해서 "}, encrypt=false]" 로 끝나는 구간 추출
+  const regex = /\[data=({[\s\S]*?}),\s*encrypt=false\]/g;
   let match;
 
   while ((match = regex.exec(content)) !== null) {
     try {
-      const jsonStr = match[1] + '}';
+      const jsonStr = match[1];
       jsonBlocks.push(JSON.parse(jsonStr));
     } catch (e) {}
   }
   return jsonBlocks;
-}
-
-function getBusinessKey(obj) {
-  if (!obj || !obj.payload) return null;
-  const p = obj.payload;
-  const key = p.polyNo || 
-              (p.rltmDpstAplcTrgtInqyInpt && p.rltmDpstAplcTrgtInqyInpt.polyNo) ||
-              p.custId ||
-              (p.chckSaveInpt && p.chckSaveInpt.custId);
-  return key;
 }
 
 export async function onRequest(context) {
@@ -113,8 +104,6 @@ export async function onRequest(context) {
     const qaBlocks = parseLogs(qaText);
     const devBlocks = parseLogs(devText);
 
-    const results = [];
-    const usedDevIndices = new Set();
     const ignoreKeys = [
       'trnnNo', 'tlgrCretDttm', 'rqstDttm', 'ipAddr', 'rqsrIp', 
       'ctfnTokn', 'mciNodeNo', 'tlgrRspnDttm', 'mciSesnId',
@@ -122,48 +111,18 @@ export async function onRequest(context) {
       'serverType', 'userTmunIdnfVal'
     ];
 
-    qaBlocks.forEach((qa) => {
-      const qaServiceId = qa.header?.rcveSrvcId;
-      const qaKey = getBusinessKey(qa);
-
-      let matchIndex = -1;
-      for (let i = 0; i < devBlocks.length; i++) {
-        if (usedDevIndices.has(i)) continue;
-
-        const dev = devBlocks[i];
-        if (qaServiceId === dev.header?.rcveSrvcId) {
-          const devKey = getBusinessKey(dev);
-          if (qaKey && devKey ? qaKey === devKey : true) {
-            matchIndex = i;
-            break;
-          }
-        }
-      }
-
-      if (matchIndex !== -1) {
-        const dev = devBlocks[matchIndex];
-        usedDevIndices.add(matchIndex);
-        const diffs = getDiff(qa, dev, ignoreKeys);
-        results.push({
-          id: results.length + 1,
-          serviceId: qaServiceId,
-          businessKey: qaKey,
-          qa,
-          dev,
-          diffs,
-          status: diffs.length === 0 ? 'MATCH' : 'MISMATCH'
-        });
-      } else {
-        results.push({
-          id: results.length + 1,
-          serviceId: qaServiceId,
-          businessKey: qaKey,
-          qa,
-          dev: null,
-          diffs: [{ path: 'root', type: 'DELETED', oldValue: 'BLOCK_MISSING_IN_DEV' }],
-          status: 'MISMATCH'
-        });
-      }
+    const results = qaBlocks.map((qa, idx) => {
+      const dev = devBlocks[idx] || null;
+      const diffs = dev ? getDiff(qa, dev, ignoreKeys) : [{ path: 'root', type: 'DELETED', oldValue: 'BLOCK_MISSING_IN_DEV' }];
+      
+      return {
+        id: idx + 1,
+        serviceId: qa.header?.rcveSrvcId || 'Unknown',
+        qa,
+        dev,
+        diffs,
+        status: (dev && diffs.length === 0) ? 'MATCH' : 'MISMATCH'
+      };
     });
 
     return new Response(JSON.stringify(results), {

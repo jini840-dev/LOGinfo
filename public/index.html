@@ -6,110 +6,254 @@
     <title>Cross-Environment Diff Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f1f3f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .diff-container { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; white-space: pre-wrap; padding: 15px; border-radius: 8px; height: 450px; overflow-y: auto; background-color: #ffffff; border: 1px solid #dee2e6; }
-        .badge-match { background-color: #e9f7ef; color: #1e7e34; border: 1px solid #c3e6cb; }
-        .badge-mismatch { background-color: #fdf2f2; color: #dc3545; border: 1px solid #f5c6cb; }
-        .diff-item { margin-bottom: 30px; border: none; border-radius: 12px; }
-        .service-id { font-weight: 700; color: #495057; }
-        .business-key { font-size: 0.9rem; color: #6c757d; }
-        .diff-path { font-weight: 600; color: #e83e8c; }
-        .old-val { color: #d63384; text-decoration: line-through; }
-        .new-val { color: #198754; font-weight: 600; }
-        header { background: linear-gradient(135deg, #007bff 0%, #6610f2 100%); color: white; padding: 40px 0; margin-bottom: 30px; border-radius: 0 0 20px 20px; }
+        :root {
+            --bg-main: #f8f9fa;
+            --bg-card: #ffffff;
+            --text-muted: #6c757d;
+            --diff-added: #e6ffec;
+            --diff-removed: #ffebe9;
+            --diff-changed: #fff5b1;
+            --border-color: #dee2e6;
+            --primary-gradient: linear-gradient(135deg, #212529 0%, #495057 100%);
+        }
+
+        body { background-color: var(--bg-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #212529; }
+        
+        header { background: var(--primary-gradient); color: white; padding: 30px 0; margin-bottom: 0; border-radius: 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        
+        .main-container { height: calc(100vh - 120px); overflow: hidden; display: flex; }
+        
+        /* Sidebar Navigation */
+        .sidebar { width: 300px; background: white; border-right: 1px solid var(--border-color); overflow-y: auto; padding: 20px 0; }
+        .list-group-item { border: none; padding: 12px 20px; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; border-left: 4px solid transparent; }
+        .list-group-item:hover { background-color: #f1f3f5; }
+        .list-group-item.active { background-color: #e9ecef !important; color: #000 !important; font-weight: 700; border-left-color: #212529; }
+        .dto-meta { font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px; }
+        
+        /* Content Area */
+        .content-area { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: white; }
+        .content-header { padding: 15px 30px; border-bottom: 1px solid var(--border-color); background: #fff; z-index: 10; }
+        .comparison-viewport { flex: 1; display: flex; overflow: hidden; }
+        
+        /* Tree View Panels */
+        .tree-panel { flex: 1; overflow-y: auto; padding: 20px 30px; border-right: 1px solid var(--border-color); position: relative; }
+        .tree-panel:last-child { border-right: none; }
+        .env-label { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: var(--text-muted); margin-bottom: 15px; letter-spacing: 1px; position: sticky; top: 0; background: white; padding: 5px 0; display: block; }
+
+        /* Tree Structure */
+        .tree-node { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; line-height: 1.6; margin-left: 20px; border-left: 1px solid #eee; padding-left: 10px; }
+        .tree-leaf { margin-bottom: 2px; padding: 2px 8px; border-radius: 4px; transition: background-color 0.1s; display: block; }
+        .tree-leaf:hover { background-color: rgba(0,0,0,0.03); }
+        .key { font-weight: 600; color: #495057; margin-right: 8px; }
+        .val { color: var(--text-muted); }
+        .val-string { color: #0b5ed7; }
+        .val-number { color: #d63384; }
+        .val-boolean { color: #fd7e14; }
+
+        /* Diff Highlighting */
+        .diff-added { background-color: var(--diff-added) !important; border: 1px solid #c3e6cb; }
+        .diff-removed { background-color: var(--diff-removed) !important; border: 1px solid #f5c6cb; }
+        .diff-changed { background-color: var(--diff-changed) !important; border: 1px solid #ffeeba; }
+        
+        .badge-match { background-color: #e9f7ef; color: #1e7e34; border: 1px solid #c3e6cb; font-size: 0.7rem; }
+        .badge-mismatch { background-color: #fdf2f2; color: #dc3545; border: 1px solid #f5c6cb; font-size: 0.7rem; }
+
+        /* Scrollbar Style */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #ced4da; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #adb5bd; }
     </style>
 </head>
 <body>
-<header class="shadow-sm">
-    <div class="container text-center">
-        <h1 class="display-5 fw-bold">🔍 Diff & Validation Engine</h1>
-        <p class="lead">QA와 Dev 환경 간의 데이터 정합성을 분석합니다.</p>
+
+<header>
+    <div class="container-fluid px-4">
+        <h4 class="mb-1 fw-bold">🔍 Diff & Validation Engine</h4>
+        <p class="small mb-0 opacity-75">Cross-Environment DTO Comparison Tool</p>
     </div>
 </header>
 
-<div class="container py-2">
-    <div id="results">
-        <div class="text-center py-5">
-            <div class="spinner-grow text-primary" role="status"></div>
-            <p class="mt-3 text-muted">로그 데이터를 대조 분석 중입니다...</p>
+<div class="main-container">
+    <!-- Sidebar -->
+    <div class="sidebar shadow-sm" id="dto-sidebar">
+        <div class="text-center py-5" id="sidebar-loader">
+            <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content-area">
+        <div id="content-placeholder" class="h-100 d-flex flex-column align-items-center justify-content-center text-muted">
+            <p>비교할 DTO를 목록에서 선택해 주세요.</p>
+        </div>
+        
+        <div id="comparison-main" class="h-100 d-flex flex-column" style="display: none !important;">
+            <div class="content-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold" id="current-srvc-id">Service ID</h5>
+                <span id="current-status-badge" class="badge rounded-pill">Status</span>
+            </div>
+            
+            <div class="comparison-viewport">
+                <div class="tree-panel" id="panel-qa">
+                    <span class="env-label">QA Environment (AS-IS)</span>
+                    <div id="tree-qa-root"></div>
+                </div>
+                <div class="tree-panel" id="panel-dev">
+                    <span class="env-label">Dev Environment (TO-BE)</span>
+                    <div id="tree-dev-root"></div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-    async function loadResults() {
+    let comparisonData = [];
+    let isSyncing = false;
+
+    // Load Data
+    async function init() {
         try {
             const response = await fetch('/api/compare');
-            const results = await response.json();
-            renderResults(results);
+            comparisonData = await response.json();
+            renderSidebar();
         } catch (e) {
-            document.getElementById('results').innerHTML = `
-                <div class="alert alert-danger shadow-sm">
-                    <h4 class="alert-heading">데이터 로드 실패</h4>
-                    <p>서버 통신 중 오류가 발생했습니다: ${e.message}</p>
-                </div>
-            `;
+            console.error(e);
+            document.getElementById('dto-sidebar').innerHTML = '<div class="p-3 text-danger">데이터 로딩 실패</div>';
         }
     }
 
-    function renderResults(results) {
-        const container = document.getElementById('results');
-        container.innerHTML = '';
+    function renderSidebar() {
+        const sidebar = document.getElementById('dto-sidebar');
+        sidebar.innerHTML = '<div class="list-group list-group-flush w-100"></div>';
+        const listGroup = sidebar.querySelector('.list-group');
 
-        if (results.length === 0) {
-            container.innerHTML = '<div class="alert alert-info text-center">비교할 로그 데이터가 없습니다.</div>';
+        comparisonData.forEach((item, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'list-group-item list-group-item-action';
+            btn.onclick = () => selectDto(index);
+            btn.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <span>DTO #${item.id}</span>
+                    <span class="badge ${item.status === 'MATCH' ? 'badge-match' : 'badge-mismatch'}">${item.status}</span>
+                </div>
+                <span class="dto-meta">${item.serviceId}</span>
+            `;
+            listGroup.appendChild(btn);
+        });
+        
+        document.getElementById('sidebar-loader').remove();
+    }
+
+    function selectDto(index) {
+        // UI State
+        document.querySelectorAll('.list-group-item').forEach((el, i) => {
+            el.classList.toggle('active', i === index);
+        });
+        document.getElementById('content-placeholder').style.display = 'none';
+        const main = document.getElementById('comparison-main');
+        main.style.setProperty('display', 'flex', 'important');
+
+        const data = comparisonData[index];
+        document.getElementById('current-srvc-id').innerText = data.serviceId;
+        const badge = document.getElementById('current-status-badge');
+        badge.innerText = data.status;
+        badge.className = `badge rounded-pill ${data.status === 'MATCH' ? 'badge-match' : 'badge-mismatch'}`;
+
+        // Render Trees
+        const qaRoot = document.getElementById('tree-qa-root');
+        const devRoot = document.getElementById('tree-dev-root');
+        qaRoot.innerHTML = '';
+        devRoot.innerHTML = '';
+
+        renderTree(data.qa, data.diffs, '', qaRoot, 'QA');
+        renderTree(data.dev, data.diffs, '', devRoot, 'DEV');
+
+        // Setup Sync Scroll
+        setupScrollSync();
+    }
+
+    function renderTree(obj, diffs, path, container, env) {
+        if (obj === null || obj === undefined) {
+            container.innerHTML = `<div class="text-muted italic p-2">${env === 'DEV' ? '데이터가 존재하지 않습니다.' : '데이터 없음'}</div>`;
             return;
         }
 
-        results.forEach(res => {
-            const diffHtml = `
-                <div class="diff-item card shadow-sm mb-4">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                        <div>
-                            <div class="service-id">Service: ${res.serviceId}</div>
-                            <div class="business-key">Key: ${res.businessKey || 'N/A'}</div>
-                        </div>
-                        <span class="badge ${res.status === 'MATCH' ? 'badge-match' : 'badge-mismatch'} px-3 py-2">
-                            ${res.status}
-                        </span>
-                    </div>
-                    
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-lg-6">
-                                <h6 class="text-muted mb-2 small uppercase fw-bold">QA ENV</h6>
-                                <div class="diff-container">${JSON.stringify(res.qa, null, 2)}</div>
-                            </div>
-                            <div class="col-lg-6">
-                                <h6 class="text-muted mb-2 small uppercase fw-bold">DEV ENV</h6>
-                                <div class="diff-container">${res.dev ? JSON.stringify(res.dev, null, 2) : '<p class="text-danger">MATCHING BLOCK MISSING</p>'}</div>
-                            </div>
-                        </div>
+        if (typeof obj === 'object' && !Array.isArray(obj)) {
+            const keys = Object.keys(obj);
+            keys.forEach(key => {
+                const currentPath = path ? `${path}.${key}` : key;
+                const diff = diffs.find(d => d.path === currentPath);
+                
+                const node = document.createElement('div');
+                node.className = 'tree-node';
+                
+                const leaf = document.createElement('div');
+                leaf.className = 'tree-leaf';
+                if (diff) {
+                    if (diff.type === 'ADDED' && env === 'DEV') leaf.classList.add('diff-added');
+                    if (diff.type === 'REMOVED' && env === 'QA') leaf.classList.add('diff-removed');
+                    if (diff.type === 'CHANGED') leaf.classList.add('diff-changed');
+                }
 
-                        ${res.diffs.length > 0 ? `
-                        <div class="mt-4 border-top pt-3">
-                            <h6 class="mb-3"><span class="badge bg-warning text-dark">Detected Differences</span></h6>
-                            <div class="list-group list-group-flush border rounded">
-                                ${res.diffs.map(d => `
-                                    <div class="list-group-item bg-light">
-                                        <div class="diff-path mb-1">${d.path}</div>
-                                        <div class="row small">
-                                            <div class="col-sm-6 text-danger">QA: ${JSON.stringify(d.oldValue)}</div>
-                                            <div class="col-sm-6 text-success">Dev: ${JSON.stringify(d.newValue)}</div>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
-            container.innerHTML += diffHtml;
-        });
+                if (typeof obj[key] === 'object' && obj[key] !== null) {
+                    leaf.innerHTML = `<span class="key">${key}:</span> <span class="val">{...}</span>`;
+                    node.appendChild(leaf);
+                    renderTree(obj[key], diffs, currentPath, node, env);
+                } else {
+                    const valClass = typeof obj[key] === 'string' ? 'val-string' : (typeof obj[key] === 'number' ? 'val-number' : 'val-boolean');
+                    leaf.innerHTML = `<span class="key">${key}:</span> <span class="val ${valClass}">${JSON.stringify(obj[key])}</span>`;
+                    node.appendChild(leaf);
+                }
+                container.appendChild(node);
+            });
+        } else if (Array.isArray(obj)) {
+            obj.forEach((item, index) => {
+                const currentPath = path ? `${path}.${index}` : `${index}`;
+                const diff = diffs.find(d => d.path === currentPath);
+                
+                const node = document.createElement('div');
+                node.className = 'tree-node';
+                
+                const leaf = document.createElement('div');
+                leaf.className = 'tree-leaf';
+                if (diff) {
+                    if (diff.type === 'ADDED' && env === 'DEV') leaf.classList.add('diff-added');
+                    if (diff.type === 'REMOVED' && env === 'QA') leaf.classList.add('diff-removed');
+                    if (diff.type === 'CHANGED') leaf.classList.add('diff-changed');
+                }
+
+                leaf.innerHTML = `<span class="key">[${index}]</span>`;
+                node.appendChild(leaf);
+                
+                if (typeof item === 'object' && item !== null) {
+                    renderTree(item, diffs, currentPath, node, env);
+                } else {
+                    leaf.innerHTML += ` <span class="val">${JSON.stringify(item)}</span>`;
+                }
+                container.appendChild(node);
+            });
+        }
     }
 
-    loadResults();
+    function setupScrollSync() {
+        const left = document.getElementById('panel-qa');
+        const right = document.getElementById('panel-dev');
+
+        const sync = (source, target) => {
+            if (isSyncing) return;
+            isSyncing = true;
+            const percentage = source.scrollTop / (source.scrollHeight - source.clientHeight);
+            target.scrollTop = percentage * (target.scrollHeight - target.clientHeight);
+            setTimeout(() => { isSyncing = false; }, 20);
+        };
+
+        left.onscroll = () => sync(left, right);
+        right.onscroll = () => sync(right, left);
+    }
+
+    init();
 </script>
 </body>
 </html>

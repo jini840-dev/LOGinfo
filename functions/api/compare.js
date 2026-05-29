@@ -60,21 +60,68 @@ function getDiff(obj1, obj2, ignoreKeys = [], path = '') {
 }
 
 /**
- * Log Parser
+ * Log Parser (Advanced)
  */
 function parseLogs(content) {
   const jsonBlocks = [];
-  // "data={" 로 시작해서 "}, encrypt=false]" 로 끝나는 구간 추출
-  const regex = /\[data=({[\s\S]*?}),\s*encrypt=false\]/g;
+  
+  // 패턴 1: 기존 표준 DTO 패턴
+  const standardRegex = /\[data=({[\s\S]*?}),\s*encrypt=false\]/g;
   let match;
-
-  while ((match = regex.exec(content)) !== null) {
+  while ((match = standardRegex.exec(content)) !== null) {
     try {
-      const jsonStr = match[1];
-      jsonBlocks.push(JSON.parse(jsonStr));
+      const data = JSON.parse(match[1]);
+      const label = data.header?.rcveSrvcId || 'Standard DTO';
+      jsonBlocks.push({ label, data, type: 'STANDARD' });
     } catch (e) {}
   }
+
+  // 패턴 2: 신규 [BAC...] 커스텀 로그 패턴
+  const bacRegex = /\[(BAC[a-zA-Z0-9]+)\]\s*([^\{]*)\s*(?=\{)/g;
+  while ((match = bacRegex.exec(content)) !== null) {
+    const identifier = match[1];
+    const rawTitle = match[2].trim();
+    const startIndex = match.index + match[0].length;
+    
+    const jsonBody = extractMatchedBraces(content, startIndex);
+    
+    if (jsonBody) {
+      try {
+        const data = JSON.parse(jsonBody);
+        const label = rawTitle || identifier;
+        jsonBlocks.push({ label, data, type: 'CUSTOM' });
+      } catch (e) {}
+    }
+  }
+
   return jsonBlocks;
+}
+
+/**
+ * 중괄호 매칭 추출 유틸리티
+ */
+function extractMatchedBraces(content, startIndex) {
+  let braceCount = 0;
+  let foundStart = false;
+  let result = '';
+
+  for (let i = startIndex; i < content.length; i++) {
+    const char = content[i];
+    if (char === '{') {
+      braceCount++;
+      foundStart = true;
+    } else if (char === '}') {
+      braceCount--;
+    }
+
+    if (foundStart) {
+      result += char;
+      if (braceCount === 0) {
+        return result;
+      }
+    }
+  }
+  return null;
 }
 
 export async function onRequest(context) {
@@ -82,7 +129,6 @@ export async function onRequest(context) {
     const url = new URL(context.request.url);
     const baseUrl = `${url.protocol}//${url.host}`;
 
-    // 정적 에셋으로 복사된 로그 파일 읽기
     const [qaRes, devRes] = await Promise.all([
       fetch(`${baseUrl}/data/qa_log.txt`),
       fetch(`${baseUrl}/data/dev_log.txt`)
@@ -111,12 +157,16 @@ export async function onRequest(context) {
       'serverType', 'userTmunIdnfVal'
     ];
 
-    const results = qaBlocks.map((qa, idx) => {
-      const dev = devBlocks[idx] || null;
+    const results = qaBlocks.map((qaBlock, idx) => {
+      const devBlock = devBlocks[idx] || null;
+      const qa = qaBlock.data;
+      const dev = devBlock ? devBlock.data : null;
+      
       const diffs = dev ? getDiff(qa, dev, ignoreKeys) : [{ path: 'root', type: 'DELETED', oldValue: 'BLOCK_MISSING_IN_DEV' }];
       
       return {
         id: idx + 1,
+        label: qaBlock.label,
         serviceId: qa.header?.rcveSrvcId || 'Unknown',
         qa,
         dev,

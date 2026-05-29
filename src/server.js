@@ -37,12 +37,16 @@ app.get('/api/compare', (req, res) => {
     'Suid'
   ];
 
-  const results = qaBlocks.map((qa, idx) => {
-    const dev = devBlocks[idx] || null;
+  const results = qaBlocks.map((qaBlock, idx) => {
+    const devBlock = devBlocks[idx] || null;
+    const qa = qaBlock.data;
+    const dev = devBlock ? devBlock.data : null;
+    
     const diffs = dev ? getDiff(qa, dev, ignoreKeys) : [{ path: 'root', type: 'DELETED', oldValue: 'BLOCK_MISSING_IN_DEV' }];
     
     return {
       id: idx + 1,
+      label: qaBlock.label,
       serviceId: qa.header?.rcveSrvcId || 'Unknown',
       qa,
       dev,

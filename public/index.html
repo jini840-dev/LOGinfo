@@ -211,15 +211,20 @@
         const devBlocksRaw = parseLogsFromContent(devContent);
         const qaBlocksRaw = parseLogsFromContent(qaContent);
 
-        const devMap = mapBlocksByKey(devBlocksRaw);
-        const qaMap = mapBlocksByKey(qaBlocksRaw);
+        const devMap = mapBlocksByLabelAndKey(devBlocksRaw);
+        const qaMap = mapBlocksByLabelAndKey(qaBlocksRaw);
 
         const allKeys = _.union(Array.from(devMap.keys()), Array.from(qaMap.keys()));
         
         comparisonData = allKeys.map((uniqueKey, idx) => {
-            const dev = devMap.get(uniqueKey) || null;
-            const qa = qaMap.get(uniqueKey) || null;
-            const bizKey = uniqueKey.split('__')[0];
+            const devBlock = devMap.get(uniqueKey) || null;
+            const qaBlock = qaMap.get(uniqueKey) || null;
+            
+            const dev = devBlock ? devBlock.data : null;
+            const qa = qaBlock ? qaBlock.data : null;
+            const label = qaBlock ? qaBlock.label : (devBlock ? devBlock.label : 'Unknown Block');
+            
+            const bizKey = findBusinessKey(qa || dev) || 'No Key';
             
             let diffs = [];
             let status = 'MATCH';
@@ -234,7 +239,8 @@
 
             return {
                 id: idx + 1,
-                bizKey: bizKey !== 'UNKNOWN' ? bizKey : `Block #${idx+1}`,
+                label,
+                bizKey,
                 serviceId: (qa?.header?.rcveSrvcId) || (dev?.header?.rcveSrvcId) || 'Unknown Service',
                 dev,
                 qa,
@@ -264,12 +270,18 @@
             else if (item.status === 'ORPHAN') statusBadge = '<span class="badge badge-orphan">ORPHAN</span>';
             else statusBadge = '<span class="badge badge-mismatch">MISMATCH</span>';
 
+            // 사용자가 요청한 대로 label을 우선적으로 표시
+            const displayName = item.label || item.bizKey || 'Block #' + item.id;
+
             btn.innerHTML = `
                 <div class="d-flex justify-content-between align-items-start">
-                    <span class="fw-bold text-truncate" style="max-width: 150px;">${item.bizKey || 'Block #' + item.id}</span>
+                    <span class="fw-bold text-truncate" title="${displayName}" style="max-width: 180px;">${displayName}</span>
                     ${statusBadge}
                 </div>
-                <span class="dto-meta">${item.serviceId}</span>
+                <div class="d-flex justify-content-between align-items-center mt-1">
+                    <span class="dto-meta" style="max-width: 140px;">${item.serviceId}</span>
+                    <span class="dto-meta fw-bold" style="font-size: 0.65rem;">${item.bizKey}</span>
+                </div>
             `;
             listGroup.appendChild(btn);
         });
@@ -284,7 +296,8 @@
         main.style.setProperty('display', 'flex', 'important');
 
         const data = comparisonData[index];
-        document.getElementById('current-srvc-id').innerText = data.serviceId;
+        // 헤더 영역에 label 정보 노출
+        document.getElementById('current-srvc-id').innerText = data.label;
         document.getElementById('current-biz-key').innerText = data.bizKey || 'No Business Key';
         
         const badge = document.getElementById('current-status-badge');

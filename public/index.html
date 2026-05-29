@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cross-Environment Diff Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
     <style>
         :root {
             --bg-main: #f8f9fa;
@@ -24,7 +25,7 @@
         .main-container { height: calc(100vh - 120px); overflow: hidden; display: flex; }
         
         /* Sidebar Navigation */
-        .sidebar { width: 300px; background: white; border-right: 1px solid var(--border-color); overflow-y: auto; padding: 20px 0; }
+        .sidebar { width: 300px; background: white; border-right: 1px solid var(--border-color); overflow-y: auto; padding: 0; }
         .list-group-item { border: none; padding: 12px 20px; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; border-left: 4px solid transparent; }
         .list-group-item:hover { background-color: #f1f3f5; }
         .list-group-item.active { background-color: #e9ecef !important; color: #000 !important; font-weight: 700; border-left-color: #212529; }
@@ -77,15 +78,41 @@
 <div class="main-container">
     <!-- Sidebar -->
     <div class="sidebar shadow-sm" id="dto-sidebar">
-        <div class="text-center py-5" id="sidebar-loader">
-            <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+        <!-- File Upload Section -->
+        <div class="p-3 border-bottom bg-light">
+            <h6 class="fw-bold mb-3 d-flex align-items-center">
+                <span class="me-2">📁</span> 로그 파일 업로드
+            </h6>
+            <div class="mb-2">
+                <label class="form-label small mb-1 text-muted">QA Log (AS-IS)</label>
+                <input type="file" id="upload-qa" class="form-control form-control-sm" accept=".txt,.log">
+            </div>
+            <div class="mb-3">
+                <label class="form-label small mb-1 text-muted">Dev Log (TO-BE)</label>
+                <input type="file" id="upload-dev" class="form-control form-control-sm" accept=".txt,.log">
+            </div>
+            <button class="btn btn-dark btn-sm w-100 fw-bold" onclick="processUploadedFiles()">비교 실행하기</button>
+            <div id="upload-status" class="small mt-2 text-center" style="display:none;"></div>
+        </div>
+
+        <div class="p-3 bg-light border-bottom">
+            <h6 class="fw-bold mb-0 small">분석 결과 목록</h6>
+        </div>
+
+        <div id="sidebar-list-container">
+            <div class="text-center py-5" id="sidebar-loader">
+                <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+                <p class="small text-muted mt-2">데이터를 불러오는 중...</p>
+            </div>
         </div>
     </div>
 
     <!-- Main Content -->
     <div class="content-area">
-        <div id="content-placeholder" class="h-100 d-flex flex-column align-items-center justify-content-center text-muted">
-            <p>비교할 DTO를 목록에서 선택해 주세요.</p>
+        <div id="content-placeholder" class="h-100 d-flex flex-column align-items-center justify-content-center text-muted text-center p-4">
+            <div class="mb-3" style="font-size: 3rem;">📄</div>
+            <h5>비교할 DTO를 목록에서 선택해 주세요.</h5>
+            <p class="small">상단 업로드 버튼을 통해 로그 파일을 직접 분석할 수 있습니다.</p>
         </div>
         
         <div id="comparison-main" class="h-100 d-flex flex-column" style="display: none !important;">
@@ -112,22 +139,32 @@
     let comparisonData = [];
     let isSyncing = false;
 
-    // Load Data
+    const ignoreKeys = [
+        'trnnNo', 'tlgrCretDttm', 'rqstDttm', 'ipAddr', 'rqsrIp', 
+        'ctfnTokn', 'mciNodeNo', 'tlgrRspnDttm', 'mciSesnId',
+        'lastModifiedDate', 'stateStartDateTime', 'id',
+        'serverType', 'userTmunIdnfVal', 'ctfnTokn', 'ipAddr',
+        'tlgrCretDttm', 'rqstDttm', 'tlgrRspnDttm', 'mciNodeNo'
+    ];
+
+    // Load Data from Server (Optional)
     async function init() {
         try {
             const response = await fetch('/api/compare');
+            if (!response.ok) throw new Error('API not available');
             comparisonData = await response.json();
             renderSidebar();
         } catch (e) {
-            console.error(e);
-            document.getElementById('dto-sidebar').innerHTML = '<div class="p-3 text-danger">데이터 로딩 실패</div>';
+            console.warn('API data loading failed, waiting for manual upload.', e);
+            document.getElementById('sidebar-list-container').innerHTML = 
+                '<div class="p-4 text-center text-muted small">서버 데이터를 불러올 수 없습니다.<br>로그 파일을 업로드해 주세요.</div>';
         }
     }
 
     function renderSidebar() {
-        const sidebar = document.getElementById('dto-sidebar');
-        sidebar.innerHTML = '<div class="list-group list-group-flush w-100"></div>';
-        const listGroup = sidebar.querySelector('.list-group');
+        const container = document.getElementById('sidebar-list-container');
+        container.innerHTML = '<div class="list-group list-group-flush w-100"></div>';
+        const listGroup = container.querySelector('.list-group');
 
         comparisonData.forEach((item, index) => {
             const btn = document.createElement('button');
@@ -142,12 +179,9 @@
             `;
             listGroup.appendChild(btn);
         });
-        
-        document.getElementById('sidebar-loader').remove();
     }
 
     function selectDto(index) {
-        // UI State
         document.querySelectorAll('.list-group-item').forEach((el, i) => {
             el.classList.toggle('active', i === index);
         });
@@ -161,7 +195,6 @@
         badge.innerText = data.status;
         badge.className = `badge rounded-pill ${data.status === 'MATCH' ? 'badge-match' : 'badge-mismatch'}`;
 
-        // Render Trees
         const qaRoot = document.getElementById('tree-qa-root');
         const devRoot = document.getElementById('tree-dev-root');
         qaRoot.innerHTML = '';
@@ -170,7 +203,6 @@
         renderTree(data.qa, data.diffs, '', qaRoot, 'QA');
         renderTree(data.dev, data.diffs, '', devRoot, 'DEV');
 
-        // Setup Sync Scroll
         setupScrollSync();
     }
 
@@ -251,6 +283,109 @@
 
         left.onscroll = () => sync(left, right);
         right.onscroll = () => sync(right, left);
+    }
+
+    // --- File Processing Logic ---
+
+    function parseLogsFromContent(content) {
+        const jsonBlocks = [];
+        const regex = /\[data=({[\s\S]*?}),\s*encrypt=false\]/g;
+        let match;
+
+        while ((match = regex.exec(content)) !== null) {
+            try {
+                const jsonStr = match[1];
+                jsonBlocks.push(JSON.parse(jsonStr));
+            } catch (e) {
+                console.warn('Failed to parse JSON block', e);
+            }
+        }
+        return jsonBlocks;
+    }
+
+    function getDiff(obj1, obj2, ignoreKeys = [], path = '') {
+        let diffs = [];
+        const currentKey = path.split('.').pop();
+        if (ignoreKeys.includes(currentKey)) return [];
+
+        if (_.isObject(obj1) && _.isObject(obj2)) {
+            const keys = _.union(_.keys(obj1), _.keys(obj2));
+            for (const key of keys) {
+                const currentPath = path ? `${path}.${key}` : key;
+                if (!_.has(obj1, key)) {
+                    if (!ignoreKeys.includes(key)) diffs.push({ path: currentPath, type: 'ADDED', newValue: obj2[key] });
+                } else if (!_.has(obj2, key)) {
+                    if (!ignoreKeys.includes(key)) diffs.push({ path: currentPath, type: 'REMOVED', oldValue: obj1[key] });
+                } else {
+                    diffs = diffs.concat(getDiff(obj1[key], obj2[key], ignoreKeys, currentPath));
+                }
+            }
+        } else if (obj1 !== obj2) {
+            diffs.push({ path, type: 'CHANGED', oldValue: obj1, newValue: obj2 });
+        }
+        return diffs;
+    }
+
+    async function readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsText(file);
+        });
+    }
+
+    async function processUploadedFiles() {
+        const qaFile = document.getElementById('upload-qa').files[0];
+        const devFile = document.getElementById('upload-dev').files[0];
+        const statusEl = document.getElementById('upload-status');
+
+        if (!qaFile || !devFile) {
+            alert('QA 로그와 Dev 로그 파일을 모두 선택해 주세요.');
+            return;
+        }
+
+        statusEl.style.display = 'block';
+        statusEl.className = 'small mt-2 text-center text-primary';
+        statusEl.innerText = '파일 분석 중...';
+
+        try {
+            const qaContent = await readFileAsText(qaFile);
+            const devContent = await readFileAsText(devFile);
+
+            const qaBlocks = parseLogsFromContent(qaContent);
+            const devBlocks = parseLogsFromContent(devContent);
+
+            if (qaBlocks.length === 0) {
+                throw new Error('QA 로그에서 유효한 데이터를 찾을 수 없습니다.');
+            }
+
+            comparisonData = qaBlocks.map((qa, idx) => {
+                const dev = devBlocks[idx] || null;
+                const diffs = dev ? getDiff(qa, dev, ignoreKeys) : [{ path: 'root', type: 'REMOVED', oldValue: 'BLOCK_MISSING_IN_DEV' }];
+                
+                return {
+                    id: idx + 1,
+                    serviceId: qa.header?.rcveSrvcId || `Log Block #${idx + 1}`,
+                    qa,
+                    dev,
+                    diffs,
+                    status: (dev && diffs.length === 0) ? 'MATCH' : 'MISMATCH'
+                };
+            });
+
+            renderSidebar();
+            statusEl.className = 'small mt-2 text-center text-success';
+            statusEl.innerText = `분석 완료: ${qaBlocks.length}건`;
+            
+            if (comparisonData.length > 0) {
+                selectDto(0);
+            }
+        } catch (e) {
+            console.error(e);
+            statusEl.className = 'small mt-2 text-center text-danger';
+            statusEl.innerText = '오류: ' + e.message;
+        }
     }
 
     init();

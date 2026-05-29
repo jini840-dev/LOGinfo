@@ -47,9 +47,15 @@
 
         /* Tree Structure */
         .tree-node { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; line-height: 1.6; margin-left: 20px; border-left: 1px solid #eee; padding-left: 10px; }
-        .tree-leaf { margin-bottom: 2px; padding: 2px 8px; border-radius: 4px; transition: background-color 0.1s; display: block; word-break: break-all; }
+        .tree-leaf { margin-bottom: 2px; padding: 4px 10px; border-radius: 4px; transition: background-color 0.1s; display: block; word-break: break-all; }
         .tree-leaf:hover { background-color: rgba(0,0,0,0.03); }
-        .key { font-weight: 600; color: #495057; margin-right: 8px; }
+        
+        /* Localized Key Styles */
+        .key-container { display: inline-flex; align-items: baseline; margin-right: 8px; }
+        .key-kr { font-weight: 700; color: #212529; font-size: 13px; }
+        .key-en { color: #868e96; font-size: 11px; margin-left: 4px; font-weight: normal; }
+        .key-plain { font-weight: 600; color: #495057; }
+
         .val { color: var(--text-muted); }
         .val-string { color: #0b5ed7; }
         .val-number { color: #d63384; }
@@ -96,6 +102,15 @@
                 <label class="form-label small mb-1 text-muted">QA Log (TO-BE)</label>
                 <input type="file" id="upload-qa" class="form-control form-control-sm" accept=".txt,.log">
             </div>
+            
+            <h6 class="fw-bold mb-3 d-flex align-items-center pt-2 border-top">
+                <span class="me-2">📑</span> 항목 정의서 업로드
+            </h6>
+            <div class="mb-3">
+                <label class="form-label small mb-1 text-muted">정의서 파일 (TSV)</label>
+                <input type="file" id="upload-metadata" class="form-control form-control-sm" accept=".txt,.tsv">
+            </div>
+
             <button class="btn btn-dark btn-sm w-100 fw-bold" onclick="processUploadedFiles()">비교 실행하기</button>
             <div id="upload-status" class="small mt-2 text-center" style="display:none;"></div>
         </div>
@@ -139,6 +154,7 @@
 
 <script>
     let comparisonData = [];
+    let metadataMap = new Map(); // 영문Key -> 한글명 매핑
     let isSyncing = false;
 
     const ignoreKeys = [
@@ -216,6 +232,14 @@
         setupScrollSync();
     }
 
+    function getKeyHtml(key) {
+        const krName = metadataMap.get(key);
+        if (krName) {
+            return `<div class="key-container"><span class="key-kr">${krName}</span><span class="key-en">(${key})</span></div>`;
+        }
+        return `<span class="key-plain">${key}:</span>`;
+    }
+
     function renderTree(obj, diffs, path, container, env) {
         if (obj === null || obj === undefined) {
             container.innerHTML = `<div class="text-muted italic p-4 text-center">데이터가 존재하지 않습니다.</div>`;
@@ -240,12 +264,12 @@
                 }
 
                 if (typeof obj[key] === 'object' && obj[key] !== null) {
-                    leaf.innerHTML = `<span class="key">${key}:</span> <span class="val">{...}</span>`;
+                    leaf.innerHTML = `${getKeyHtml(key)} <span class="val">{...}</span>`;
                     node.appendChild(leaf);
                     renderTree(obj[key], diffs, currentPath, node, env);
                 } else {
                     const valClass = typeof obj[key] === 'string' ? 'val-string' : (typeof obj[key] === 'number' ? 'val-number' : 'val-boolean');
-                    leaf.innerHTML = `<span class="key">${key}:</span> <span class="val ${valClass}">${JSON.stringify(obj[key])}</span>`;
+                    leaf.innerHTML = `${getKeyHtml(key)} <span class="val ${valClass}">${JSON.stringify(obj[key])}</span>`;
                     node.appendChild(leaf);
                 }
                 container.appendChild(node);
@@ -266,7 +290,7 @@
                     if (diff.type === 'CHANGED') leaf.classList.add('diff-changed');
                 }
 
-                leaf.innerHTML = `<span class="key">[${index}]</span>`;
+                leaf.innerHTML = `<span class="key-plain">[${index}]</span>`;
                 node.appendChild(leaf);
                 
                 if (typeof item === 'object' && item !== null) {
@@ -304,16 +328,28 @@
 
     // --- High-Performance File Processing & Matching ---
 
+    function parseMetadata(content) {
+        const map = new Map();
+        const lines = content.split(/\r?\n/);
+        lines.forEach(line => {
+            const cols = line.split('\t');
+            if (cols.length >= 2) {
+                const krName = cols[0].trim();
+                const enName = cols[1].trim();
+                if (enName && krName) {
+                    map.set(enName, krName);
+                }
+            }
+        });
+        return map;
+    }
+
     function findBusinessKey(obj) {
         if (!obj) return null;
         const candidates = ['contractNo', 'polyNo', 'id', 'key', 'custId', 'trnnNo', 'srvcId', 'uuid'];
-        
-        // 1. Top level search
         for (const k of candidates) {
             if (obj[k] !== undefined && obj[k] !== null) return String(obj[k]);
         }
-        
-        // 2. Nested search (header, payload, data)
         const sub = ['header', 'payload', 'data', 'dto'];
         for (const s of sub) {
             if (obj[s] && typeof obj[s] === 'object') {
@@ -328,7 +364,6 @@
     function mapBlocksByKey(blocks) {
         const map = new Map();
         const counts = new Map();
-        
         blocks.forEach((block) => {
             let key = findBusinessKey(block) || "UNKNOWN";
             counts.set(key, (counts.get(key) || 0) + 1);
@@ -383,6 +418,7 @@
     async function processUploadedFiles() {
         const devFile = document.getElementById('upload-dev').files[0];
         const qaFile = document.getElementById('upload-qa').files[0];
+        const metaFile = document.getElementById('upload-metadata').files[0];
         const statusEl = document.getElementById('upload-status');
 
         if (!devFile || !qaFile) {
@@ -392,9 +428,16 @@
 
         statusEl.style.display = 'block';
         statusEl.className = 'small mt-2 text-center text-primary';
-        statusEl.innerText = '비즈니스 키 분석 및 매칭 중...';
+        statusEl.innerText = '파일 분석 중...';
 
         try {
+            // 1. 항목 정의서 처리 (선택 사항)
+            if (metaFile) {
+                const metaContent = await readFileAsText(metaFile);
+                metadataMap = parseMetadata(metaContent);
+            }
+
+            // 2. 로그 파일 처리
             const devContent = await readFileAsText(devFile);
             const qaContent = await readFileAsText(qaFile);
 
@@ -435,7 +478,7 @@
 
             renderSidebar();
             statusEl.className = 'small mt-2 text-center text-success';
-            statusEl.innerText = `매칭 완료: ${comparisonData.length}건`;
+            statusEl.innerText = `매칭 완료: ${comparisonData.length}건 (정의서 매핑 ${metadataMap.size}건)`;
             if (comparisonData.length > 0) selectDto(0);
 
         } catch (e) {

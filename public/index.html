@@ -386,16 +386,43 @@
     function getDiff(obj1, obj2, ignoreKeys = [], path = '') {
         let diffs = [];
         const currentKey = path.split('.').pop();
+        
+        // 1. 고정 무시 목록 확인
         if (ignoreKeys.includes(currentKey)) return [];
+
+        // 2. 패턴 기반 무시 (SUID 또는 Suid로 끝나는 경우)
+        // 영문 키 확인
+        if (currentKey && (currentKey.endsWith('SUID') || currentKey.endsWith('Suid'))) return [];
+        
+        // 매핑된 한글명 확인 (항목 정의서 기반)
+        const krName = metadataMap.get(currentKey);
+        if (krName && (krName.endsWith('SUID') || krName.endsWith('Suid'))) return [];
 
         if (_.isObject(obj1) && _.isObject(obj2)) {
             const keys = _.union(_.keys(obj1), _.keys(obj2));
             for (const key of keys) {
                 const currentPath = path ? `${path}.${key}` : key;
                 if (!_.has(obj1, key)) {
-                    if (!ignoreKeys.includes(key)) diffs.push({ path: currentPath, type: 'ADDED', newValue: obj2[key] });
+                    if (!ignoreKeys.includes(key)) {
+                        // 자식 노드 재귀 호출 전 패턴 체크 (최적화)
+                        const childKrName = metadataMap.get(key);
+                        const isPatternMatch = (key.endsWith('SUID') || key.endsWith('Suid')) || 
+                                             (childKrName && (childKrName.endsWith('SUID') || childKrName.endsWith('Suid')));
+                        
+                        if (!isPatternMatch) {
+                            diffs.push({ path: currentPath, type: 'ADDED', newValue: obj2[key] });
+                        }
+                    }
                 } else if (!_.has(obj2, key)) {
-                    if (!ignoreKeys.includes(key)) diffs.push({ path: currentPath, type: 'REMOVED', oldValue: obj1[key] });
+                    if (!ignoreKeys.includes(key)) {
+                        const childKrName = metadataMap.get(key);
+                        const isPatternMatch = (key.endsWith('SUID') || key.endsWith('Suid')) || 
+                                             (childKrName && (childKrName.endsWith('SUID') || childKrName.endsWith('Suid')));
+                        
+                        if (!isPatternMatch) {
+                            diffs.push({ path: currentPath, type: 'REMOVED', oldValue: obj1[key] });
+                        }
+                    }
                 } else {
                     diffs = diffs.concat(getDiff(obj1[key], obj2[key], ignoreKeys, currentPath));
                 }

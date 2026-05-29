@@ -168,13 +168,85 @@
 
     async function init() {
         try {
-            const response = await fetch('/api/compare');
-            if (!response.ok) throw new Error('API not available');
-            comparisonData = await response.json();
-            renderSidebar();
+            await autoLoadDefaultFiles();
         } catch (e) {
-            console.warn('API data loading failed, waiting for manual upload.', e);
+            console.warn('자동 로드 실패, 수동 업로드를 이용해 주세요.', e);
         }
+    }
+
+    async function autoLoadDefaultFiles() {
+        const statusEl = document.getElementById('upload-status');
+        statusEl.style.display = 'block';
+        statusEl.className = 'small mt-2 text-center text-primary';
+        statusEl.innerText = '기본 파일 불러오는 중...';
+
+        try {
+            const [devRes, qaRes, metaRes] = await Promise.all([
+                fetch('/data/dev_log.txt'),
+                fetch('/data/qa_log.txt'),
+                fetch('/data/metadata.tsv')
+            ]);
+
+            if (!devRes.ok || !qaRes.ok) {
+                throw new Error('서버에서 기본 로그 파일을 찾을 수 없습니다.');
+            }
+
+            const devContent = await devRes.text();
+            const qaContent = await qaRes.text();
+            
+            if (metaRes.ok) {
+                const metaContent = await metaRes.text();
+                metadataMap = parseMetadata(metaContent);
+            }
+
+            processContents(devContent, qaContent);
+        } catch (e) {
+            statusEl.style.display = 'none';
+            throw e;
+        }
+    }
+
+    function processContents(devContent, qaContent) {
+        const statusEl = document.getElementById('upload-status');
+        const devBlocksRaw = parseLogsFromContent(devContent);
+        const qaBlocksRaw = parseLogsFromContent(qaContent);
+
+        const devMap = mapBlocksByKey(devBlocksRaw);
+        const qaMap = mapBlocksByKey(qaBlocksRaw);
+
+        const allKeys = _.union(Array.from(devMap.keys()), Array.from(qaMap.keys()));
+        
+        comparisonData = allKeys.map((uniqueKey, idx) => {
+            const dev = devMap.get(uniqueKey) || null;
+            const qa = qaMap.get(uniqueKey) || null;
+            const bizKey = uniqueKey.split('__')[0];
+            
+            let diffs = [];
+            let status = 'MATCH';
+
+            if (dev && qa) {
+                diffs = getDiff(dev, qa, ignoreKeys);
+                status = diffs.length === 0 ? 'MATCH' : 'MISMATCH';
+            } else {
+                status = 'ORPHAN';
+                diffs = dev ? [{path: 'root', type: 'REMOVED'}] : [{path: 'root', type: 'ADDED'}];
+            }
+
+            return {
+                id: idx + 1,
+                bizKey: bizKey !== 'UNKNOWN' ? bizKey : `Block #${idx+1}`,
+                serviceId: (qa?.header?.rcveSrvcId) || (dev?.header?.rcveSrvcId) || 'Unknown Service',
+                dev,
+                qa,
+                diffs,
+                status
+            };
+        });
+
+        renderSidebar();
+        statusEl.className = 'small mt-2 text-center text-success';
+        statusEl.innerText = `매칭 완료: ${comparisonData.length}건 (정의서 매핑 ${metadataMap.size}건)`;
+        if (comparisonData.length > 0) selectDto(0);
     }
 
     function renderSidebar() {

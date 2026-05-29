@@ -4,164 +4,368 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cross-Environment Diff Dashboard</title>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
     <style>
         :root {
-            --bg-main: #f8f9fa;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-main: #f8fafc;
             --bg-card: #ffffff;
-            --text-muted: #6c757d;
-            --diff-added: #e6ffec;
-            --diff-removed: #ffebe9;
-            --diff-changed: #fff5b1;
-            --border-color: #dee2e6;
-            --primary-gradient: linear-gradient(135deg, #212529 0%, #495057 100%);
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --diff-added: #f0fdf4;
+            --diff-added-border: #bbf7d0;
+            --diff-removed: #fef2f2;
+            --diff-removed-border: #fecaca;
+            --diff-changed: #fffbeb;
+            --diff-changed-border: #fef3c7;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
+        * { box-sizing: border-box; }
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
-        body { background-color: var(--bg-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #212529; display: flex; flex-direction: column; }
+        body { 
+            background-color: var(--bg-main); 
+            font-family: 'Inter', -apple-system, sans-serif; 
+            color: var(--text-main); 
+            display: flex; 
+            flex-direction: column;
+        }
         
-        header { background: var(--primary-gradient); color: white; padding: 25px 0; flex-shrink: 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        
-        .main-container { flex: 1; display: flex; overflow: hidden; }
+        /* Typography */
+        h1, h2, h3, h4, h5, h6 { font-weight: 600; letter-spacing: -0.025em; }
+
+        /* Header Styles */
+        header { 
+            background: white; 
+            border-bottom: 1px solid var(--border);
+            padding: 16px 32px;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+        .brand-title { 
+            font-size: 1.25rem; 
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Layout */
+        .app-container { flex: 1; display: flex; overflow: hidden; }
         
         /* Sidebar Navigation */
-        .sidebar { width: 320px; background: white; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
-        #sidebar-list-container { flex: 1; overflow-y: auto; }
+        .sidebar { 
+            width: 340px; 
+            background: white; 
+            border-right: 1px solid var(--border);
+            display: flex; 
+            flex-direction: column;
+            transition: var(--transition);
+        }
+        .sidebar-header { padding: 24px; border-bottom: 1px solid var(--border); }
+        .sidebar-scroll { flex: 1; overflow-y: auto; padding: 12px; }
         
-        .list-group-item { border: none; padding: 12px 20px; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; border-left: 4px solid transparent; }
-        .list-group-item:hover { background-color: #f1f3f5; }
-        .list-group-item.active { background-color: #e9ecef !important; color: #000 !important; font-weight: 700; border-left-color: #212529; }
-        .dto-meta { font-size: 0.75rem; color: var(--text-muted); display: block; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .nav-item { 
+            border: 1px solid transparent;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: var(--transition);
+            background: transparent;
+            text-align: left;
+            width: 100%;
+            display: block;
+        }
+        .nav-item:hover { background: #f1f5f9; }
+        .nav-item.active { 
+            background: #eef2ff; 
+            border-color: #c7d2fe;
+        }
+        .nav-item.active .nav-title { color: var(--primary); }
         
-        /* Content Area */
-        .content-area { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: white; }
-        .content-header { padding: 15px 30px; border-bottom: 1px solid var(--border-color); background: #fff; flex-shrink: 0; }
-        .comparison-viewport { flex: 1; display: flex; overflow: hidden; }
+        .nav-title { font-size: 0.9rem; font-weight: 600; display: block; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .nav-sub { font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; }
         
-        /* Tree View Panels */
-        .tree-panel { flex: 1; overflow-y: auto; padding: 20px 30px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
-        .tree-panel:last-child { border-right: none; }
-        .env-label { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: var(--text-muted); margin-bottom: 15px; letter-spacing: 1px; position: sticky; top: 0; background: white; padding: 5px 0; display: block; z-index: 5; }
-        .tree-container { flex: 1; min-height: min-content; }
+        /* Main View */
+        .main-view { flex: 1; overflow-y: auto; display: flex; flex-direction: column; position: relative; }
+        .view-header { 
+            padding: 32px 48px; 
+            background: white; 
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+        .view-controls {
+            padding: 12px 48px;
+            background: #f8fafc;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 20px;
+        }
 
-        /* Tree Structure */
-        .tree-node { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; line-height: 1.6; margin-left: 20px; border-left: 1px solid #eee; padding-left: 10px; }
-        .tree-leaf { margin-bottom: 2px; padding: 4px 10px; border-radius: 4px; transition: background-color 0.1s; display: block; word-break: break-all; }
-        .tree-leaf:hover { background-color: rgba(0,0,0,0.03); }
+        /* Content Sections */
+        .content-container { padding: 40px 48px; max-width: 1400px; margin: 0 auto; width: 100%; }
         
-        /* Localized Key Styles */
-        .key-container { display: inline-flex; align-items: baseline; margin-right: 8px; }
-        .key-kr { font-weight: 700; color: #212529; font-size: 13px; }
-        .key-en { color: #868e96; font-size: 11px; margin-left: 4px; font-weight: normal; }
-        .key-plain { font-weight: 600; color: #495057; }
-
-        .val { color: var(--text-muted); }
-        .val-string { color: #0b5ed7; }
-        .val-number { color: #d63384; }
-        .val-boolean { color: #fd7e14; }
-
-        /* Diff Highlighting */
-        .diff-added { background-color: var(--diff-added) !important; border: 1px solid #c3e6cb; }
-        .diff-removed { background-color: var(--diff-removed) !important; border: 1px solid #f5c6cb; }
-        .diff-changed { background-color: var(--diff-changed) !important; border: 1px solid #ffeeba; }
+        /* Card & Accordion */
+        .data-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 24px;
+            overflow: hidden;
+            transition: var(--transition);
+        }
+        .data-card:hover { box-shadow: var(--shadow-md); }
         
-        .badge-match { background-color: #e9f7ef; color: #1e7e34; border: 1px solid #c3e6cb; font-size: 0.7rem; }
-        .badge-mismatch { background-color: #fdf2f2; color: #dc3545; border: 1px solid #f5c6cb; font-size: 0.7rem; }
-        .badge-orphan { background-color: #f8f9fa; color: #6c757d; border: 1px solid var(--border-color); font-size: 0.7rem; }
+        .card-header {
+            padding: 20px 24px;
+            background: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            border-bottom: 1px solid transparent;
+        }
+        .card-header.expanded { border-bottom-color: var(--border); }
+        .card-header .title { font-weight: 700; font-size: 1rem; color: var(--text-main); display: flex; align-items: center; gap: 12px; }
+        .card-header .arrow { transition: transform 0.3s; color: var(--text-muted); }
+        .card-header.expanded .arrow { transform: rotate(180deg); }
+        
+        .card-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-in-out;
+            background: #ffffff;
+        }
+        .card-body.expanded { max-height: 5000px; } /* Large enough value */
 
-        /* Scrollbar Style */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        .comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 24px; }
+        .env-section { display: flex; flex-direction: column; gap: 12px; }
+        .env-tag { 
+            font-size: 0.65rem; 
+            font-weight: 800; 
+            padding: 4px 8px; 
+            border-radius: 4px; 
+            background: #f1f5f9; 
+            color: var(--text-muted);
+            width: fit-content;
+            margin-bottom: 8px;
+        }
+
+        /* Tree Styles */
+        .tree-node { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; line-height: 1.8; }
+        .tree-row { 
+            display: flex; 
+            align-items: baseline; 
+            padding: 4px 8px; 
+            border-radius: 6px; 
+            margin-bottom: 2px;
+            transition: background-color 0.1s;
+            position: relative;
+        }
+        .tree-row:hover { background-color: #f8fafc; }
+        .indent { width: 24px; flex-shrink: 0; border-left: 1px solid #e2e8f0; height: 100%; position: absolute; left: -12px; top: 0; }
+        
+        .diff-added { background-color: var(--diff-added) !important; color: #166534; }
+        .diff-removed { background-color: var(--diff-removed) !important; color: #991b1b; text-decoration: line-through; }
+        .diff-changed { background-color: var(--diff-changed) !important; color: #92400e; }
+
+        .key-text { color: var(--text-main); font-weight: 500; margin-right: 8px; }
+        .key-kr { color: var(--text-muted); font-size: 11px; margin-left: 4px; font-weight: 400; }
+        .val-text { color: var(--text-muted); word-break: break-all; }
+        
+        /* Badges */
+        .badge-s { 
+            font-size: 0.7rem; 
+            padding: 4px 10px; 
+            border-radius: 9999px; 
+            font-weight: 600; 
+            border: 1px solid transparent;
+        }
+        .badge-match { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+        .badge-mismatch { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+        .badge-orphan { background: #f1f5f9; color: #475569; border-color: #e2e8f0; }
+
+        /* Toggle Switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #cbd5e1;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px; width: 18px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #ced4da; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #adb5bd; }
+        ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 40px;
+        }
     </style>
 </head>
 <body>
 
 <header>
-    <div class="container-fluid px-4">
-        <h4 class="mb-1 fw-bold">🔍 Diff & Validation Engine</h4>
-        <p class="small mb-0 opacity-75">Cross-Environment DTO Comparison Tool</p>
+    <div class="brand-title">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+        <span>Cross-Env Diff Engine</span>
     </div>
+    <div id="upload-status" class="badge-s badge-orphan" style="display:none;"></div>
 </header>
 
-<div class="main-container">
+<div class="app-container">
     <!-- Sidebar -->
-    <div class="sidebar shadow-sm" id="dto-sidebar">
-        <!-- File Upload Section -->
-        <div class="p-3 border-bottom bg-light">
-            <h6 class="fw-bold mb-3 d-flex align-items-center">
-                <span class="me-2">📁</span> 로그 파일 업로드
-            </h6>
-            <div class="mb-2">
-                <label class="form-label small mb-1 text-muted">Dev Log (AS-IS)</label>
-                <input type="file" id="upload-dev" class="form-control form-control-sm" accept=".txt,.log">
+    <aside class="sidebar" id="dto-sidebar">
+        <div class="sidebar-header">
+            <h6 class="mb-3 text-uppercase text-muted fw-800" style="font-size: 0.7rem; letter-spacing: 0.1em;">Log Sources</h6>
+            <div class="d-flex flex-column gap-2">
+                <button class="btn btn-outline-secondary btn-sm text-start" onclick="document.getElementById('upload-dev').click()">
+                    <small>AS-IS Log</small>
+                    <input type="file" id="upload-dev" hidden accept=".txt,.log" onchange="processUploadedFiles()">
+                </button>
+                <button class="btn btn-outline-secondary btn-sm text-start" onclick="document.getElementById('upload-qa').click()">
+                    <small>TO-BE Log</small>
+                    <input type="file" id="upload-qa" hidden accept=".txt,.log" onchange="processUploadedFiles()">
+                </button>
+                <button class="btn btn-primary btn-sm mt-2 fw-600" onclick="processUploadedFiles()">🚀 Start Comparison</button>
             </div>
-            <div class="mb-3">
-                <label class="form-label small mb-1 text-muted">QA Log (TO-BE)</label>
-                <input type="file" id="upload-qa" class="form-control form-control-sm" accept=".txt,.log">
+        </div>
+        <div class="sidebar-scroll" id="sidebar-list-container">
+            <div class="empty-state" style="padding: 60px 20px;">
+                <p class="small">No logs loaded yet.</p>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main View -->
+    <main class="main-view">
+        <div id="comparison-placeholder" class="empty-state">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mb-4 opacity-20"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            <h3>Ready to analyze</h3>
+            <p>Select a DTO from the sidebar to begin deep comparison.</p>
+        </div>
+
+        <div id="comparison-main" style="display: none;">
+            <div class="view-header">
+                <div class="d-flex justify-content-between align-items-start mb-4">
+                    <div>
+                        <h2 id="current-srvc-id" class="mb-1">Service Label</h2>
+                        <div class="d-flex gap-2 align-items-center">
+                            <span id="current-biz-key" class="text-muted small fw-500">Business Key</span>
+                            <span id="current-status-badge" class="badge-s">Status</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             
-            <h6 class="fw-bold mb-3 d-flex align-items-center pt-2 border-top">
-                <span class="me-2">📑</span> 항목 정의서 업로드
-            </h6>
-            <div class="mb-3">
-                <label class="form-label small mb-1 text-muted">정의서 파일 (TSV)</label>
-                <input type="file" id="upload-metadata" class="form-control form-control-sm" accept=".txt,.tsv">
+            <div class="view-controls">
+                <label class="small fw-600 text-muted" for="filter-mismatch">Show Mismatches Only</label>
+                <label class="switch">
+                    <input type="checkbox" id="filter-mismatch">
+                    <span class="slider"></span>
+                </label>
             </div>
 
-            <button class="btn btn-dark btn-sm w-100 fw-bold" onclick="processUploadedFiles()">비교 실행하기</button>
-            <div id="upload-status" class="small mt-2 text-center" style="display:none;"></div>
-        </div>
+            <div class="content-container">
+                <!-- Header Block (Accordion) -->
+                <div class="data-card" id="card-header-block">
+                    <div class="card-header" onclick="toggleAccordion('header-body')">
+                        <div class="title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                            Common Header
+                        </div>
+                        <svg class="arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div class="card-body" id="header-body">
+                        <div class="comparison-grid">
+                            <div class="env-section">
+                                <span class="env-tag">DEV HEADER</span>
+                                <div id="tree-header-dev"></div>
+                            </div>
+                            <div class="env-section">
+                                <span class="env-tag">QA HEADER</span>
+                                <div id="tree-header-qa"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-        <div class="p-3 bg-light border-bottom">
-            <div class="d-flex justify-content-between align-items-center mb-0">
-                <h6 class="fw-bold mb-0 small">분석 결과 목록</h6>
-                <div class="form-check form-switch mb-0">
-                    <input class="form-check-input" type="checkbox" id="filter-mismatch" style="cursor: pointer;">
-                    <label class="form-check-label small fw-bold text-danger" for="filter-mismatch" style="cursor: pointer; font-size: 0.7rem;">Mismatch Only</label>
+                <!-- Payload Block (Always Expanded) -->
+                <div class="data-card">
+                    <div class="card-header expanded" style="cursor: default;">
+                        <div class="title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                            Data Payload
+                        </div>
+                    </div>
+                    <div class="card-body expanded">
+                        <div class="comparison-grid">
+                            <div class="env-section">
+                                <span class="env-tag">DEV DATA</span>
+                                <div id="tree-payload-dev"></div>
+                            </div>
+                            <div class="env-section">
+                                <span class="env-tag">QA DATA</span>
+                                <div id="tree-payload-qa"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-
-        <div id="sidebar-list-container">
-            <div class="text-center py-5" id="sidebar-loader">
-                <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
-                <p class="small text-muted mt-2">파일을 업로드해 주세요.</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main Content -->
-    <div class="content-area">
-        <div id="comparison-main" class="h-100 d-flex flex-column" style="display: none !important;">
-            <div class="content-header d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                    <h5 class="mb-0 fw-bold me-3" id="current-srvc-id">Service ID</h5>
-                    <span id="current-biz-key" class="badge bg-light text-dark border small fw-normal">Key</span>
-                </div>
-                <span id="current-status-badge" class="badge rounded-pill">Status</span>
-            </div>
-            
-            <div class="comparison-viewport">
-                <div class="tree-panel" id="panel-dev">
-                    <span class="env-label">Dev Environment (AS-IS)</span>
-                    <div class="tree-container" id="tree-dev-root"></div>
-                </div>
-                <div class="tree-panel" id="panel-qa">
-                    <span class="env-label">QA Environment (TO-BE)</span>
-                    <div class="tree-container" id="tree-qa-root"></div>
-                </div>
-            </div>
-        </div>
-    </div>
+    </main>
 </div>
 
 <script>
     let comparisonData = [];
-    let metadataMap = new Map(); // 영문Key -> 한글명 매핑
-    let isSyncing = false;
+    let metadataMap = new Map();
+    let showMismatchOnly = false;
+    let selectedIdx = -1;
 
     const ignoreKeys = [
         'trnnNo', 'tlgrCretDttm', 'rqstDttm', 'ipAddr', 'rqsrIp', 
@@ -176,15 +380,14 @@
         try {
             await autoLoadDefaultFiles();
         } catch (e) {
-            console.warn('자동 로드 실패, 수동 업로드를 이용해 주세요.', e);
+            console.warn('Auto-load failed', e);
         }
     }
 
     async function autoLoadDefaultFiles() {
         const statusEl = document.getElementById('upload-status');
         statusEl.style.display = 'block';
-        statusEl.className = 'small mt-2 text-center text-primary';
-        statusEl.innerText = '기본 파일 불러오는 중...';
+        statusEl.innerText = 'Loading defaults...';
 
         try {
             const [devRes, qaRes, metaRes] = await Promise.all([
@@ -192,49 +395,34 @@
                 fetch('/data/qa_log.txt'),
                 fetch('/data/metadata.tsv')
             ]);
-
-            if (!devRes.ok || !qaRes.ok) {
-                throw new Error('서버에서 기본 로그 파일을 찾을 수 없습니다.');
+            if (devRes.ok && qaRes.ok) {
+                const devContent = await devRes.text();
+                const qaContent = await qaRes.text();
+                if (metaRes.ok) metadataMap = parseMetadata(await metaRes.text());
+                processContents(devContent, qaContent);
             }
-
-            const devContent = await devRes.text();
-            const qaContent = await qaRes.text();
-            
-            if (metaRes.ok) {
-                const metaContent = await metaRes.text();
-                metadataMap = parseMetadata(metaContent);
-            }
-
-            processContents(devContent, qaContent);
         } catch (e) {
             statusEl.style.display = 'none';
-            throw e;
         }
     }
 
     function processContents(devContent, qaContent) {
-        const statusEl = document.getElementById('upload-status');
         const devBlocksRaw = parseLogsFromContent(devContent);
         const qaBlocksRaw = parseLogsFromContent(qaContent);
-
         const devMap = mapBlocksByLabelAndKey(devBlocksRaw);
         const qaMap = mapBlocksByLabelAndKey(qaBlocksRaw);
-
         const allKeys = _.union(Array.from(devMap.keys()), Array.from(qaMap.keys()));
         
         comparisonData = allKeys.map((uniqueKey, idx) => {
             const devBlock = devMap.get(uniqueKey) || null;
             const qaBlock = qaMap.get(uniqueKey) || null;
-            
             const dev = devBlock ? devBlock.data : null;
             const qa = qaBlock ? qaBlock.data : null;
-            const label = qaBlock ? qaBlock.label : (devBlock ? devBlock.label : 'Unknown Block');
-            
+            const label = qaBlock ? qaBlock.label : (devBlock ? devBlock.label : 'Unknown');
             const bizKey = findBusinessKey(qa || dev) || 'No Key';
             
             let diffs = [];
             let status = 'MATCH';
-
             if (dev && qa) {
                 diffs = getDiff(dev, qa, ignoreKeys);
                 status = diffs.length === 0 ? 'MATCH' : 'MISMATCH';
@@ -243,367 +431,212 @@
                 diffs = dev ? [{path: 'root', type: 'REMOVED'}] : [{path: 'root', type: 'ADDED'}];
             }
 
-            return {
-                id: idx + 1,
-                label,
-                bizKey,
-                serviceId: (qa?.header?.rcveSrvcId) || (dev?.header?.rcveSrvcId) || 'Unknown Service',
-                dev,
-                qa,
-                diffs,
-                status
-            };
+            return { id: idx + 1, label, bizKey, dev, qa, diffs, status, 
+                     serviceId: (qa?.header?.rcveSrvcId) || (dev?.header?.rcveSrvcId) || 'Unknown' };
         });
 
         renderSidebar();
-        statusEl.className = 'small mt-2 text-center text-success';
-        statusEl.innerText = `매칭 완료: ${comparisonData.length}건 (정의서 매핑 ${metadataMap.size}건)`;
+        const statusEl = document.getElementById('upload-status');
+        statusEl.className = 'badge-s badge-match';
+        statusEl.innerText = `Analysis Ready: ${comparisonData.length} items`;
         if (comparisonData.length > 0) selectDto(0);
     }
 
     function renderSidebar() {
         const container = document.getElementById('sidebar-list-container');
-        container.innerHTML = '<div class="list-group list-group-flush w-100"></div>';
-        const listGroup = container.querySelector('.list-group');
-
+        container.innerHTML = '';
         comparisonData.forEach((item, index) => {
             const btn = document.createElement('button');
-            btn.className = 'list-group-item list-group-item-action';
+            btn.className = 'nav-item' + (selectedIdx === index ? ' active' : '');
             btn.onclick = () => selectDto(index);
             
-            let statusBadge = '';
-            if (item.status === 'MATCH') statusBadge = '<span class="badge badge-match">MATCH</span>';
-            else if (item.status === 'ORPHAN') statusBadge = '<span class="badge badge-orphan">ORPHAN</span>';
-            else statusBadge = '<span class="badge badge-mismatch">MISMATCH</span>';
-
-            // 사용자가 요청한 대로 label을 우선적으로 표시
-            const displayName = item.label || item.bizKey || 'Block #' + item.id;
+            let badgeClass = 'badge-match';
+            if (item.status === 'MISMATCH') badgeClass = 'badge-mismatch';
+            else if (item.status === 'ORPHAN') badgeClass = 'badge-orphan';
 
             btn.innerHTML = `
-                <div class="d-flex justify-content-between align-items-start">
-                    <span class="fw-bold text-truncate" title="${displayName}" style="max-width: 180px;">${displayName}</span>
-                    ${statusBadge}
-                </div>
-                <div class="d-flex justify-content-between align-items-center mt-1">
-                    <span class="dto-meta" style="max-width: 140px;">${item.serviceId}</span>
-                    <span class="dto-meta fw-bold" style="font-size: 0.65rem;">${item.bizKey}</span>
+                <span class="nav-title" title="${item.label}">${item.label}</span>
+                <div class="nav-sub">
+                    <span>${item.serviceId}</span>
+                    <span class="badge-s ${badgeClass}">${item.status}</span>
                 </div>
             `;
-            listGroup.appendChild(btn);
+            container.appendChild(btn);
         });
     }
 
     function selectDto(index) {
-        document.querySelectorAll('.list-group-item').forEach((el, i) => {
-            el.classList.toggle('active', i === index);
-        });
+        selectedIdx = index;
+        document.querySelectorAll('.nav-item').forEach((el, i) => el.classList.toggle('active', i === index));
         
-        const main = document.getElementById('comparison-main');
-        main.style.setProperty('display', 'flex', 'important');
+        document.getElementById('comparison-placeholder').style.display = 'none';
+        document.getElementById('comparison-main').style.display = 'block';
 
         const data = comparisonData[index];
-        // 헤더 영역에 label 정보 노출
         document.getElementById('current-srvc-id').innerText = data.label;
-        document.getElementById('current-biz-key').innerText = data.bizKey || 'No Business Key';
+        document.getElementById('current-biz-key').innerText = data.bizKey;
         
         const badge = document.getElementById('current-status-badge');
         badge.innerText = data.status;
-        if (data.status === 'MATCH') badge.className = 'badge rounded-pill badge-match';
-        else if (data.status === 'ORPHAN') badge.className = 'badge rounded-pill badge-orphan';
-        else badge.className = 'badge rounded-pill badge-mismatch';
+        badge.className = 'badge-s ' + (data.status === 'MATCH' ? 'badge-match' : (data.status === 'ORPHAN' ? 'badge-orphan' : 'badge-mismatch'));
 
-        const qaRoot = document.getElementById('tree-qa-root');
-        const devRoot = document.getElementById('tree-dev-root');
-        qaRoot.innerHTML = '';
-        devRoot.innerHTML = '';
+        // Reset and Render
+        ['tree-header-dev', 'tree-header-qa', 'tree-payload-dev', 'tree-payload-qa'].forEach(id => document.getElementById(id).innerHTML = '');
+        
+        // Split Header/Payload logic
+        const devHeader = data.dev?.header || null;
+        const devPayload = devHeader ? _.omit(data.dev, 'header') : data.dev;
+        const qaHeader = data.qa?.header || null;
+        const qaPayload = qaHeader ? _.omit(data.qa, 'header') : data.qa;
 
-        renderTree(data.dev, data.diffs, '', devRoot, 'DEV');
-        renderTree(data.qa, data.diffs, '', qaRoot, 'QA');
-
-        setupScrollSync();
+        renderTree(devHeader, data.diffs, 'header', document.getElementById('tree-header-dev'), 'DEV');
+        renderTree(qaHeader, data.diffs, 'header', document.getElementById('tree-header-qa'), 'QA');
+        renderTree(devPayload, data.diffs, '', document.getElementById('tree-payload-dev'), 'DEV');
+        renderTree(qaPayload, data.diffs, '', document.getElementById('tree-payload-qa'), 'QA');
     }
 
-    function getKeyHtml(key) {
-        const krName = metadataMap.get(key);
-        if (krName) {
-            return `<div class="key-container"><span class="key-kr">${krName}</span><span class="key-en">(${key})</span></div>`;
-        }
-        return `<span class="key-plain">${key}:</span>`;
+    function toggleAccordion(id) {
+        const body = document.getElementById(id);
+        const header = body.previousElementSibling;
+        body.classList.toggle('expanded');
+        header.classList.toggle('expanded');
     }
+
+    document.getElementById('filter-mismatch').addEventListener('change', (e) => {
+        showMismatchOnly = e.target.checked;
+        if (selectedIdx !== -1) selectDto(selectedIdx);
+    });
 
     function renderTree(obj, diffs, path, container, env) {
-        if (obj === null || obj === undefined) {
-            container.innerHTML = `<div class="text-muted italic p-4 text-center">데이터가 존재하지 않습니다.</div>`;
+        if (!obj) {
+            container.innerHTML = '<span class="text-muted small">N/A</span>';
             return;
         }
 
-        if (typeof obj === 'object' && !Array.isArray(obj)) {
-            const keys = Object.keys(obj);
-            keys.forEach(key => {
-                const currentPath = path ? `${path}.${key}` : key;
-                const diff = diffs ? diffs.find(d => d.path === currentPath) : null;
-                
-                const node = document.createElement('div');
-                node.className = 'tree-node';
-                
-                const leaf = document.createElement('div');
-                leaf.className = 'tree-leaf';
-                if (diff) {
-                    if (diff.type === 'ADDED' && env === 'QA') leaf.classList.add('diff-added');
-                    if (diff.type === 'REMOVED' && env === 'DEV') leaf.classList.add('diff-removed');
-                    if (diff.type === 'CHANGED') leaf.classList.add('diff-changed');
-                }
+        const keys = Object.keys(obj);
+        keys.forEach(key => {
+            const currentPath = path ? (path === 'header' ? `header.${key}` : `${path}.${key}`) : key;
+            const diff = diffs ? diffs.find(d => d.path === currentPath) : null;
+            
+            // Mismatch Only 필터링 로직: 
+            // 1. diff가 있고, 2. 현재 환경(DEV/QA)에 해당하는 변경이면 노출
+            // 3. 또는 자식 중에 diff가 있는 경우 노출 (재귀적 확인 필요하나 여기서는 단순화하여 diff 있는 노드만 노출로 시작)
+            if (showMismatchOnly && !diff && !hasDiffInChildren(currentPath, diffs)) return;
 
-                if (typeof obj[key] === 'object' && obj[key] !== null) {
-                    leaf.innerHTML = `${getKeyHtml(key)} <span class="val">{...}</span>`;
-                    node.appendChild(leaf);
-                    renderTree(obj[key], diffs, currentPath, node, env);
-                } else {
-                    const valClass = typeof obj[key] === 'string' ? 'val-string' : (typeof obj[key] === 'number' ? 'val-number' : 'val-boolean');
-                    leaf.innerHTML = `${getKeyHtml(key)} <span class="val ${valClass}">${JSON.stringify(obj[key])}</span>`;
-                    node.appendChild(leaf);
-                }
-                container.appendChild(node);
-            });
-        } else if (Array.isArray(obj)) {
-            obj.forEach((item, index) => {
-                const currentPath = path ? `${path}.${index}` : `${index}`;
-                const diff = diffs ? diffs.find(d => d.path === currentPath) : null;
-                
-                const node = document.createElement('div');
-                node.className = 'tree-node';
-                
-                const leaf = document.createElement('div');
-                leaf.className = 'tree-leaf';
-                if (diff) {
-                    if (diff.type === 'ADDED' && env === 'QA') leaf.classList.add('diff-added');
-                    if (diff.type === 'REMOVED' && env === 'DEV') leaf.classList.add('diff-removed');
-                    if (diff.type === 'CHANGED') leaf.classList.add('diff-changed');
-                }
+            const row = document.createElement('div');
+            row.className = 'tree-row';
+            if (diff) {
+                if (diff.type === 'ADDED' && env === 'QA') row.classList.add('diff-added');
+                if (diff.type === 'REMOVED' && env === 'DEV') row.classList.add('diff-removed');
+                if (diff.type === 'CHANGED') row.classList.add('diff-changed');
+            }
 
-                leaf.innerHTML = `<span class="key-plain">[${index}]</span>`;
-                node.appendChild(leaf);
-                
-                if (typeof item === 'object' && item !== null) {
-                    renderTree(item, diffs, currentPath, node, env);
-                } else {
-                    leaf.innerHTML += ` <span class="val">${JSON.stringify(item)}</span>`;
-                }
-                container.appendChild(node);
-            });
+            const krName = metadataMap.get(key);
+            const keyHtml = `<span class="key-text">${key}${krName ? `<span class="key-kr">(${krName})</span>` : ''}:</span>`;
+
+            if (typeof obj[key] === 'object' && obj[key] !== null) {
+                row.innerHTML = `${keyHtml} <span class="val-text">{ }</span>`;
+                container.appendChild(row);
+                const childContainer = document.createElement('div');
+                childContainer.style.marginLeft = '20px';
+                childContainer.style.borderLeft = '1px solid #f1f5f9';
+                container.appendChild(childContainer);
+                renderTree(obj[key], diffs, currentPath, childContainer, env);
+            } else {
+                row.innerHTML = `${keyHtml} <span class="val-text">${JSON.stringify(obj[key])}</span>`;
+                container.appendChild(row);
+            }
+        });
+    }
+
+    function hasDiffInChildren(currentPath, diffs) {
+        if (!diffs) return false;
+        return diffs.some(d => d.path.startsWith(currentPath + '.'));
+    }
+
+    // --- Parser Utils ---
+    function parseLogsFromContent(content) {
+        const jsonBlocks = [];
+        // Standard Pattern
+        const stdRegex = /\[data=({[\s\S]*?}),\s*encrypt=false\]/g;
+        let m;
+        while ((m = stdRegex.exec(content))) {
+            try { 
+                const data = JSON.parse(m[1]);
+                jsonBlocks.push({ label: data.header?.rcveSrvcId || 'Standard DTO', data });
+            } catch (e) {}
         }
+        // BAC Pattern
+        const bacRegex = /\[(BAC[a-zA-Z0-9]+)\]\s*([^\{]*)\s*(?=\{)/g;
+        while ((m = bacRegex.exec(content))) {
+            const body = extractMatchedBraces(content, m.index + m[0].length);
+            if (body) {
+                try { jsonBlocks.push({ label: m[2].trim() || m[1], data: JSON.parse(body) }); } catch (e) {}
+            }
+        }
+        return jsonBlocks;
     }
 
-    function setupScrollSync() {
-        const devPanel = document.getElementById('panel-dev');
-        const qaPanel = document.getElementById('panel-qa');
-
-        const sync = (source, target) => {
-            if (isSyncing) return;
-            isSyncing = true;
-            
-            const maxScrollSource = source.scrollHeight - source.clientHeight;
-            const maxScrollTarget = target.scrollHeight - target.clientHeight;
-            
-            if (maxScrollSource > 0) {
-                const percentage = source.scrollTop / maxScrollSource;
-                target.scrollTop = percentage * maxScrollTarget;
-            }
-            
-            setTimeout(() => { isSyncing = false; }, 30);
-        };
-
-        devPanel.onscroll = () => sync(devPanel, qaPanel);
-        qaPanel.onscroll = () => sync(qaPanel, devPanel);
+    function extractMatchedBraces(content, start) {
+        let count = 0, found = false, res = '';
+        for (let i = start; i < content.length; i++) {
+            if (content[i] === '{') { count++; found = true; }
+            else if (content[i] === '}') count--;
+            if (found) { res += content[i]; if (count === 0) return res; }
+        }
+        return null;
     }
 
-    // --- High-Performance File Processing & Matching ---
-
-    function parseMetadata(content) {
-        const map = new Map();
-        const lines = content.split(/\r?\n/);
-        lines.forEach(line => {
-            const cols = line.split('\t');
-            if (cols.length >= 2) {
-                const krName = cols[0].trim();
-                const enName = cols[1].trim();
-                if (enName && krName) {
-                    map.set(enName, krName);
-                }
-            }
+    function mapBlocksByLabelAndKey(blocks) {
+        const map = new Map(), counts = new Map();
+        blocks.forEach(b => {
+            let key = findBusinessKey(b.data) || "UNK";
+            counts.set(key, (counts.get(key) || 0) + 1);
+            map.set(`${key}__${counts.get(key)}`, b);
         });
         return map;
     }
 
     function findBusinessKey(obj) {
         if (!obj) return null;
-        const candidates = ['contractNo', 'polyNo', 'id', 'key', 'custId', 'trnnNo', 'srvcId', 'uuid'];
-        for (const k of candidates) {
-            if (obj[k] !== undefined && obj[k] !== null) return String(obj[k]);
-        }
-        const sub = ['header', 'payload', 'data', 'dto'];
-        for (const s of sub) {
-            if (obj[s] && typeof obj[s] === 'object') {
-                for (const k of candidates) {
-                    if (obj[s][k] !== undefined && obj[s][k] !== null) return String(obj[s][k]);
-                }
-            }
-        }
+        const candidates = ['contractNo', 'polyNo', 'id', 'key', 'custId'];
+        for (const k of candidates) if (obj[k]) return String(obj[k]);
+        if (obj.header) for (const k of candidates) if (obj.header[k]) return String(obj.header[k]);
         return null;
     }
 
-    function mapBlocksByKey(blocks) {
-        const map = new Map();
-        const counts = new Map();
-        blocks.forEach((block) => {
-            let key = findBusinessKey(block) || "UNKNOWN";
-            counts.set(key, (counts.get(key) || 0) + 1);
-            const uniqueKey = `${key}__${counts.get(key)}`;
-            map.set(uniqueKey, block);
-        });
-        return map;
-    }
-
-    function parseLogsFromContent(content) {
-        const jsonBlocks = [];
-        const regex = /\[data=({[\s\S]*?}),\s*encrypt=false\]/g;
-        let match;
-        while ((match = regex.exec(content)) !== null) {
-            try { jsonBlocks.push(JSON.parse(match[1])); } catch (e) {}
-        }
-        return jsonBlocks;
-    }
-
-    function getDiff(obj1, obj2, ignoreKeys = [], path = '') {
+    function getDiff(obj1, obj2, ignore, path = '') {
         let diffs = [];
-        const currentKey = path.split('.').pop();
-        
-        // 1. 고정 무시 목록 확인
-        if (ignoreKeys.includes(currentKey)) return [];
-
-        // 2. 패턴 기반 무시 (SUID 또는 Suid로 끝나는 경우)
-        // 영문 키 확인
-        if (currentKey && (currentKey.endsWith('SUID') || currentKey.endsWith('Suid'))) return [];
-        
-        // 매핑된 한글명 확인 (항목 정의서 기반)
-        const krName = metadataMap.get(currentKey);
-        if (krName && (krName.endsWith('SUID') || krName.endsWith('Suid'))) return [];
-
         if (_.isObject(obj1) && _.isObject(obj2)) {
             const keys = _.union(_.keys(obj1), _.keys(obj2));
-            for (const key of keys) {
-                const currentPath = path ? `${path}.${key}` : key;
-                if (!_.has(obj1, key)) {
-                    if (!ignoreKeys.includes(key)) {
-                        // 자식 노드 재귀 호출 전 패턴 체크 (최적화)
-                        const childKrName = metadataMap.get(key);
-                        const isPatternMatch = (key.endsWith('SUID') || key.endsWith('Suid')) || 
-                                             (childKrName && (childKrName.endsWith('SUID') || childKrName.endsWith('Suid')));
-                        
-                        if (!isPatternMatch) {
-                            diffs.push({ path: currentPath, type: 'ADDED', newValue: obj2[key] });
-                        }
-                    }
-                } else if (!_.has(obj2, key)) {
-                    if (!ignoreKeys.includes(key)) {
-                        const childKrName = metadataMap.get(key);
-                        const isPatternMatch = (key.endsWith('SUID') || key.endsWith('Suid')) || 
-                                             (childKrName && (childKrName.endsWith('SUID') || childKrName.endsWith('Suid')));
-                        
-                        if (!isPatternMatch) {
-                            diffs.push({ path: currentPath, type: 'REMOVED', oldValue: obj1[key] });
-                        }
-                    }
-                } else {
-                    diffs = diffs.concat(getDiff(obj1[key], obj2[key], ignoreKeys, currentPath));
-                }
-            }
+            keys.forEach(key => {
+                const curPath = path ? `${path}.${key}` : key;
+                if (ignore.includes(key)) return;
+                if (!_.has(obj1, key)) diffs.push({ path: curPath, type: 'ADDED' });
+                else if (!_.has(obj2, key)) diffs.push({ path: curPath, type: 'REMOVED' });
+                else diffs = diffs.concat(getDiff(obj1[key], obj2[key], ignore, curPath));
+            });
         } else if (obj1 !== obj2) {
-            diffs.push({ path, type: 'CHANGED', oldValue: obj1, newValue: obj2 });
+            diffs.push({ path, type: 'CHANGED' });
         }
         return diffs;
     }
 
-    async function readFileAsText(file) {
-        return new Promise((r, j) => {
-            const reader = new FileReader();
-            reader.onload = () => r(reader.result);
-            reader.onerror = j;
-            reader.readAsText(file);
+    function parseMetadata(content) {
+        const map = new Map();
+        content.split(/\r?\n/).forEach(line => {
+            const cols = line.split('\t');
+            if (cols.length >= 2) map.set(cols[1].trim(), cols[0].trim());
         });
+        return map;
     }
 
     async function processUploadedFiles() {
         const devFile = document.getElementById('upload-dev').files[0];
         const qaFile = document.getElementById('upload-qa').files[0];
-        const metaFile = document.getElementById('upload-metadata').files[0];
-        const statusEl = document.getElementById('upload-status');
-
-        if (!devFile || !qaFile) {
-            alert('Dev 로그와 QA 로그 파일을 모두 선택해 주세요.');
-            return;
-        }
-
-        statusEl.style.display = 'block';
-        statusEl.className = 'small mt-2 text-center text-primary';
-        statusEl.innerText = '파일 분석 중...';
-
-        try {
-            // 1. 항목 정의서 처리 (선택 사항)
-            if (metaFile) {
-                const metaContent = await readFileAsText(metaFile);
-                metadataMap = parseMetadata(metaContent);
-            }
-
-            // 2. 로그 파일 처리
-            const devContent = await readFileAsText(devFile);
-            const qaContent = await readFileAsText(qaFile);
-
-            const devBlocksRaw = parseLogsFromContent(devContent);
-            const qaBlocksRaw = parseLogsFromContent(qaContent);
-
-            const devMap = mapBlocksByKey(devBlocksRaw);
-            const qaMap = mapBlocksByKey(qaBlocksRaw);
-
-            const allKeys = _.union(Array.from(devMap.keys()), Array.from(qaMap.keys()));
-            
-            comparisonData = allKeys.map((uniqueKey, idx) => {
-                const dev = devMap.get(uniqueKey) || null;
-                const qa = qaMap.get(uniqueKey) || null;
-                const bizKey = uniqueKey.split('__')[0];
-                
-                let diffs = [];
-                let status = 'MATCH';
-
-                if (dev && qa) {
-                    diffs = getDiff(dev, qa, ignoreKeys);
-                    status = diffs.length === 0 ? 'MATCH' : 'MISMATCH';
-                } else {
-                    status = 'ORPHAN';
-                    diffs = dev ? [{path: 'root', type: 'REMOVED'}] : [{path: 'root', type: 'ADDED'}];
-                }
-
-                return {
-                    id: idx + 1,
-                    bizKey: bizKey !== 'UNKNOWN' ? bizKey : `Block #${idx+1}`,
-                    serviceId: (qa?.header?.rcveSrvcId) || (dev?.header?.rcveSrvcId) || 'Unknown Service',
-                    dev,
-                    qa,
-                    diffs,
-                    status
-                };
-            });
-
-            renderSidebar();
-            statusEl.className = 'small mt-2 text-center text-success';
-            statusEl.innerText = `매칭 완료: ${comparisonData.length}건 (정의서 매핑 ${metadataMap.size}건)`;
-            if (comparisonData.length > 0) selectDto(0);
-
-        } catch (e) {
-            console.error(e);
-            statusEl.className = 'small mt-2 text-center text-danger';
-            statusEl.innerText = '오류: ' + e.message;
-        }
+        if (!devFile || !qaFile) return;
+        const [devC, qaC] = await Promise.all([devFile.text(), qaFile.text()]);
+        processContents(devC, qaC);
     }
 
     init();

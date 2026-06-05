@@ -60,6 +60,26 @@
             gap: 10px;
         }
 
+        /* Dashboard Styles */
+        .dashboard-banner {
+            display: flex;
+            gap: 16px;
+            padding: 12px 32px;
+            background: #f1f5f9;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+        }
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 12px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            font-weight: 600;
+        }
+
         /* Layout */
         .app-container { flex: 1; display: flex; overflow: hidden; }
         
@@ -256,8 +276,26 @@
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
         <span>Cross-Env Diff Engine</span>
     </div>
-    <div id="upload-status" class="badge-s badge-orphan" style="display:none;"></div>
+    <div class="d-flex align-items-center gap-3">
+        <button class="btn btn-outline-primary btn-sm fw-600" id="btn-export-csv">📥 Export Mismatches (CSV)</button>
+        <div id="upload-status" class="badge-s badge-orphan" style="display:none;"></div>
+    </div>
 </header>
+
+<div class="dashboard-banner" id="summary-dashboard">
+    <div class="stat-item">
+        <span class="text-muted">Total DTO:</span>
+        <span id="stat-total" class="text-primary">0</span>
+    </div>
+    <div class="stat-item">
+        <span class="text-muted">Matched:</span>
+        <span id="stat-match" class="text-success">0</span>
+    </div>
+    <div class="stat-item">
+        <span class="text-muted">Mismatched:</span>
+        <span id="stat-mismatch" class="text-danger">0</span>
+    </div>
+</div>
 
 <div class="app-container">
     <!-- Sidebar -->
@@ -309,6 +347,10 @@
             </div>
             
             <div class="view-controls">
+                <div class="d-flex align-items-center gap-2 me-auto">
+                    <label class="small fw-600 text-muted" for="ignore-keys-input">Ignore List:</label>
+                    <input type="text" id="ignore-keys-input" class="form-control form-control-sm" style="width: 400px;" placeholder="e.g. trnnNo, tlgrCretDttm, timestamp">
+                </div>
                 <label class="small fw-600 text-muted" for="filter-mismatch">Show Mismatches Only</label>
                 <label class="switch">
                     <input type="checkbox" id="filter-mismatch">
@@ -371,17 +413,27 @@
     let metadataMap = new Map();
     let showMismatchOnly = false;
     let selectedIdx = -1;
+    let customIgnoreKeys = [];
 
-    const ignoreKeys = [
+    const defaultIgnoreKeys = [
         'trnnNo', 'tlgrCretDttm', 'rqstDttm', 'ipAddr', 'rqsrIp', 
         'ctfnTokn', 'mciNodeNo', 'tlgrRspnDttm', 'mciSesnId',
         'lastModifiedDate', 'stateStartDateTime', 'id',
-        'serverType', 'userTmunIdnfVal', 'ctfnTokn', 'ipAddr',
-        'tlgrCretDttm', 'rqstDttm', 'tlgrRspnDttm', 'mciNodeNo',
-        'Suid'
+        'serverType', 'userTmunIdnfVal', 'Suid', 'acheCmpuYymm'
     ];
 
+    function getActiveIgnoreKeys() {
+        return [...defaultIgnoreKeys, ...customIgnoreKeys];
+    }
+
     async function init() {
+        document.getElementById('ignore-keys-input').value = defaultIgnoreKeys.join(', ');
+        document.getElementById('ignore-keys-input').addEventListener('change', (e) => {
+            customIgnoreKeys = e.target.value.split(',').map(k => k.trim()).filter(k => k);
+            if (comparisonData.length > 0) reProcessComparison();
+        });
+        document.getElementById('btn-export-csv').addEventListener('click', exportMismatchesToCsv);
+        
         try {
             await autoLoadDefaultFiles();
         } catch (e) {
@@ -429,8 +481,8 @@
             let diffs = [];
             let status = 'MATCH';
             if (dev && qa) {
-                diffs = getDiff(dev, qa, ignoreKeys);
-                status = diffs.length === 0 ? 'MATCH' : 'MISMATCH';
+                diffs = getDiff(dev, qa, getActiveIgnoreKeys());
+                status = diffs.filter(d => d.type !== 'IGNORED').length === 0 ? 'MATCH' : 'MISMATCH';
             } else {
                 status = 'ORPHAN';
                 diffs = dev ? [{path: 'root', type: 'REMOVED'}] : [{path: 'root', type: 'ADDED'}];
@@ -441,16 +493,45 @@
         });
 
         renderSidebar();
+        updateDashboard();
         const statusEl = document.getElementById('upload-status');
         statusEl.className = 'badge-s badge-match';
         statusEl.innerText = `Analysis Ready: ${comparisonData.length} items`;
         if (comparisonData.length > 0) selectDto(0);
     }
 
+    function reProcessComparison() {
+        const currentSelectedId = selectedIdx !== -1 ? comparisonData[selectedIdx].id : -1;
+        comparisonData.forEach(item => {
+            if (item.dev && item.qa) {
+                item.diffs = getDiff(item.dev, item.qa, getActiveIgnoreKeys());
+                item.status = item.diffs.filter(d => d.type !== 'IGNORED').length === 0 ? 'MATCH' : 'MISMATCH';
+            }
+        });
+        renderSidebar();
+        updateDashboard();
+        if (currentSelectedId !== -1) {
+            const newIdx = comparisonData.findIndex(d => d.id === currentSelectedId);
+            if (newIdx !== -1) selectDto(newIdx);
+        }
+    }
+
+    function updateDashboard() {
+        const total = comparisonData.length;
+        const match = comparisonData.filter(d => d.status === 'MATCH').length;
+        const mismatch = comparisonData.filter(d => d.status === 'MISMATCH').length;
+        
+        document.getElementById('stat-total').innerText = total;
+        document.getElementById('stat-match').innerText = match;
+        document.getElementById('stat-mismatch').innerText = mismatch;
+    }
+
     function renderSidebar() {
         const container = document.getElementById('sidebar-list-container');
         container.innerHTML = '';
         comparisonData.forEach((item, index) => {
+            if (showMismatchOnly && item.status === 'MATCH') return;
+            
             const btn = document.createElement('button');
             btn.className = 'nav-item' + (selectedIdx === index ? ' active' : '');
             btn.onclick = () => selectDto(index);
@@ -472,8 +553,16 @@
 
     function selectDto(index) {
         selectedIdx = index;
-        document.querySelectorAll('.nav-item').forEach((el, i) => el.classList.toggle('active', i === index));
+        document.querySelectorAll('.nav-item').forEach((el, i) => {
+            // Index might mismatch if filtered, but sidebar items have index attribute or similar
+        });
         
+        // Refined selection highlighting
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach(el => el.classList.remove('active'));
+        // Find by content or just re-render sidebar properly
+        renderSidebar(); 
+
         document.getElementById('comparison-placeholder').style.display = 'none';
         document.getElementById('comparison-main').style.display = 'block';
 
@@ -485,10 +574,8 @@
         badge.innerText = data.status;
         badge.className = 'badge-s ' + (data.status === 'MATCH' ? 'badge-match' : (data.status === 'ORPHAN' ? 'badge-orphan' : 'badge-mismatch'));
 
-        // Reset and Render
         ['tree-header-dev', 'tree-header-qa', 'tree-payload-dev', 'tree-payload-qa'].forEach(id => document.getElementById(id).innerHTML = '');
         
-        // Split Header/Payload logic
         const devHeader = data.dev?.header || null;
         const devPayload = devHeader ? _.omit(data.dev, 'header') : data.dev;
         const qaHeader = data.qa?.header || null;
@@ -499,18 +586,6 @@
         renderTree(devPayload, data.diffs, '', document.getElementById('tree-payload-dev'), 'DEV');
         renderTree(qaPayload, data.diffs, '', document.getElementById('tree-payload-qa'), 'QA');
     }
-
-    function toggleAccordion(id) {
-        const body = document.getElementById(id);
-        const header = body.previousElementSibling;
-        body.classList.toggle('expanded');
-        header.classList.toggle('expanded');
-    }
-
-    document.getElementById('filter-mismatch').addEventListener('change', (e) => {
-        showMismatchOnly = e.target.checked;
-        if (selectedIdx !== -1) selectDto(selectedIdx);
-    });
 
     function renderTree(obj, diffs, path, container, env) {
         if (!obj) {
@@ -523,24 +598,23 @@
             const currentPath = path ? (path === 'header' ? `header.${key}` : `${path}.${key}`) : key;
             const diff = diffs ? diffs.find(d => d.path === currentPath) : null;
             
-            // Mismatch Only 필터링 로직: 
-            // 1. diff가 있고, 2. 현재 환경(DEV/QA)에 해당하는 변경이면 노출
-            // 3. 또는 자식 중에 diff가 있는 경우 노출 (재귀적 확인 필요하나 여기서는 단순화하여 diff 있는 노드만 노출로 시작)
-            if (showMismatchOnly && !diff && !hasDiffInChildren(currentPath, diffs)) return;
+            if (showMismatchOnly && (!diff || diff.type === 'IGNORED') && !hasDiffInChildren(currentPath, diffs)) return;
 
             const row = document.createElement('div');
             row.className = 'tree-row';
             if (diff) {
                 if (diff.type === 'ADDED' && env === 'QA') row.classList.add('diff-added');
-                if (diff.type === 'REMOVED' && env === 'DEV') row.classList.add('diff-removed');
-                if (diff.type === 'CHANGED') row.classList.add('diff-changed');
+                else if (diff.type === 'REMOVED' && env === 'DEV') row.classList.add('diff-removed');
+                else if (diff.type === 'CHANGED') row.classList.add('diff-changed');
+                else if (diff.type === 'IGNORED') row.classList.add('diff-ignored');
             }
 
             const krName = metadataMap.get(key);
             const keyHtml = `<span class="key-text">${key}${krName ? `<span class="key-kr">(${krName})</span>` : ''}:</span>`;
 
             if (typeof obj[key] === 'object' && obj[key] !== null) {
-                row.innerHTML = `${keyHtml} <span class="val-text">{ }</span>`;
+                const isArray = Array.isArray(obj[key]);
+                row.innerHTML = `${keyHtml} <span class="val-text">${isArray ? '[ ]' : '{ }'}</span>`;
                 container.appendChild(row);
                 const childContainer = document.createElement('div');
                 childContainer.style.marginLeft = '20px';
@@ -548,10 +622,172 @@
                 container.appendChild(childContainer);
                 renderTree(obj[key], diffs, currentPath, childContainer, env);
             } else {
-                row.innerHTML = `${keyHtml} <span class="val-text">${JSON.stringify(obj[key])}</span>`;
+                const val = maskSensitiveData(obj[key]);
+                row.innerHTML = `${keyHtml} <span class="val-text">${JSON.stringify(val)}</span>`;
                 container.appendChild(row);
             }
         });
+    }
+
+    function maskSensitiveData(val) {
+        if (typeof val !== 'string') return val;
+        // 주민번호 (6-7)
+        val = val.replace(/\d{6}-\d{7}/g, (m) => m.substring(0, 7) + '*******');
+        // 전화번호
+        val = val.replace(/010-\d{4}-\d{4}/g, (m) => m.substring(0, 4) + '****' + m.substring(8));
+        // 계좌번호 (가정: 10-15자리)
+        val = val.replace(/\d{10,15}/g, (m) => m.substring(0, 3) + '********' + m.substring(m.length - 2));
+        return val;
+    }
+
+    function exportMismatchesToCsv() {
+        const mismatches = comparisonData.filter(d => d.status === 'MISMATCH');
+        if (mismatches.length === 0) {
+            alert('No mismatches to export!');
+            return;
+        }
+
+        let csv = 'ID,Label,Service ID,Business Key,Status,Mismatch Count\n';
+        mismatches.forEach(m => {
+            const mismatchCount = m.diffs.filter(d => d.type !== 'IGNORED').length;
+            csv += `${m.id},"${m.label}","${m.serviceId}","${m.bizKey}","${m.status}",${mismatchCount}\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `diff_report_${new Date().toISOString().slice(0,10)}.csv`;
+        link.click();
+    }
+
+    function getDiff(obj1, obj2, ignore, path = '') {
+        let diffs = [];
+        const currentKey = path.split('.').pop();
+        const isIgnored = ignore.includes(currentKey) || (path && ignore.includes(path));
+
+        if (Array.isArray(obj1) && Array.isArray(obj2)) {
+            const matchingKeys = ['polyNo', 'id', 'contractNo', 'trnnNo', 'key'];
+            let remainingObj2 = [...obj2];
+            obj1.forEach((item1, index) => {
+                const curPath = `${path}[${index}]`;
+                let matchIdx = -1;
+                if (_.isObject(item1)) {
+                    const idKey = matchingKeys.find(k => _.has(item1, k));
+                    if (idKey) matchIdx = remainingObj2.findIndex(item2 => item2[idKey] === item1[idKey]);
+                }
+                if (matchIdx === -1) matchIdx = remainingObj2.findIndex(item2 => _.isEqual(item1, item2));
+                
+                if (matchIdx !== -1) {
+                    const item2 = remainingObj2.splice(matchIdx, 1)[0];
+                    diffs = diffs.concat(getDiff(item1, item2, ignore, curPath));
+                } else {
+                    diffs.push({ path: curPath, type: 'REMOVED', oldValue: item1 });
+                }
+            });
+            remainingObj2.forEach((item2, index) => {
+                diffs.push({ path: `${path}[+${index}]`, type: 'ADDED', newValue: item2 });
+            });
+        } else if (_.isObject(obj1) && _.isObject(obj2)) {
+            const keys = _.union(_.keys(obj1), _.keys(obj2));
+            keys.forEach(key => {
+                const curPath = path ? `${path}.${key}` : key;
+                if (!_.has(obj1, key)) {
+                    diffs.push({ path: curPath, type: ignore.includes(key) ? 'IGNORED' : 'ADDED', newValue: obj2[key] });
+                } else if (!_.has(obj2, key)) {
+                    diffs.push({ path: curPath, type: ignore.includes(key) ? 'IGNORED' : 'REMOVED', oldValue: obj1[key] });
+                } else {
+                    diffs = diffs.concat(getDiff(obj1[key], obj2[key], ignore, curPath));
+                }
+            });
+        } else if (!_.isEqual(obj1, obj2)) {
+            diffs.push({ path, type: isIgnored ? 'IGNORED' : 'CHANGED', oldValue: obj1, newValue: obj2 });
+        }
+        return diffs;
+    }
+
+    // --- Parser Utils ---
+    function parseLogsFromContent(content) {
+        const jsonBlocks = [];
+        const matchedRanges = [];
+        const isOverlapping = (start, end) => matchedRanges.some(range => (start >= range.start && start < range.end) || (end > range.start && end <= range.end));
+
+        // Pattern 1: Standard
+        const stdRegex = /\[data=({[\s\S]*?}),\s*encrypt=false\]/g;
+        let m;
+        while ((m = stdRegex.exec(content))) {
+            try { 
+                const data = JSON.parse(m[1]);
+                jsonBlocks.push({ label: data.header?.rcveSrvcId || 'Standard DTO', data, type: 'STANDARD' });
+                matchedRanges.push({ start: m.index, end: stdRegex.lastIndex });
+            } catch (e) {}
+        }
+        // Pattern 2: BAC
+        const bacRegex = /\[(BAC[a-zA-Z0-9]+)\]\s*([^\{]*)\s*(?=\{)/g;
+        while ((m = bacRegex.exec(content))) {
+            const body = extractMatchedBlock(content, m.index + m[0].length);
+            if (body) {
+                const end = m.index + m[0].length + body.length;
+                if (!isOverlapping(m.index, end)) {
+                    try { 
+                        jsonBlocks.push({ label: m[2].trim() || m[1], data: JSON.parse(body), type: 'CUSTOM' }); 
+                        matchedRanges.push({ start: m.index, end });
+                    } catch (e) {}
+                }
+            }
+        }
+        // Pattern 3: Raw
+        let rawCount = 0;
+        for (let i = 0; i < content.length; i++) {
+            if ((content[i] === '{' || content[i] === '[') && !isOverlapping(i, i + 1)) {
+                const block = extractMatchedBlock(content, i);
+                if (block && block.length > 10) {
+                    const sanitized = sanitizeJson(block);
+                    try {
+                        const data = JSON.parse(sanitized);
+                        rawCount++;
+                        const label = getSmartLabel(data, `JSON Block #${rawCount}`);
+                        jsonBlocks.push({ label, data, type: 'RAW' });
+                        matchedRanges.push({ start: i, end: i + block.length });
+                        i += block.length - 1;
+                    } catch (e) {}
+                }
+            }
+        }
+        return jsonBlocks;
+    }
+
+    function sanitizeJson(raw) {
+        let cleaned = raw.trim();
+        if (cleaned.startsWith('{') && cleaned.endsWith('}')) {
+            const inner = cleaned.substring(1, cleaned.length - 1).trim();
+            if (inner.startsWith('[') && inner.endsWith(']')) return `{"data": ${inner}}`;
+        }
+        return cleaned;
+    }
+
+    function getSmartLabel(data, fallback) {
+        if (!data) return fallback;
+        const target = Array.isArray(data) ? data[0] : (data.data && Array.isArray(data.data) ? data.data[0] : data);
+        if (!target || typeof target !== 'object') return fallback;
+        const priorityKeys = ['polyNo', 'trnnNo', 'id', 'rcveSrvcId', 'emnb', 'srvcId'];
+        for (const key of priorityKeys) {
+            if (target[key]) return `${key}: ${target[key]}`;
+            if (target.header && target.header[key]) return `${key}: ${target.header[key]}`;
+        }
+        return fallback;
+    }
+
+    function extractMatchedBlock(content, startIndex) {
+        const startChar = content[startIndex];
+        const endChar = startChar === '{' ? '}' : (startChar === '[' ? ']' : null);
+        if (!endChar) return null;
+        let count = 0, found = false, result = '';
+        for (let i = startIndex; i < content.length; i++) {
+            if (content[i] === startChar) { count++; found = true; }
+            else if (content[i] === endChar) count--;
+            if (found) { result += content[i]; if (count === 0) return result; }
+        }
+        return null;
     }
 
     function hasDiffInChildren(currentPath, diffs) {
@@ -559,38 +795,17 @@
         return diffs.some(d => d.path.startsWith(currentPath + '.'));
     }
 
-    // --- Parser Utils ---
-    function parseLogsFromContent(content) {
-        const jsonBlocks = [];
-        // Standard Pattern
-        const stdRegex = /\[data=({[\s\S]*?}),\s*encrypt=false\]/g;
-        let m;
-        while ((m = stdRegex.exec(content))) {
-            try { 
-                const data = JSON.parse(m[1]);
-                jsonBlocks.push({ label: data.header?.rcveSrvcId || 'Standard DTO', data });
-            } catch (e) {}
-        }
-        // BAC Pattern
-        const bacRegex = /\[(BAC[a-zA-Z0-9]+)\]\s*([^\{]*)\s*(?=\{)/g;
-        while ((m = bacRegex.exec(content))) {
-            const body = extractMatchedBraces(content, m.index + m[0].length);
-            if (body) {
-                try { jsonBlocks.push({ label: m[2].trim() || m[1], data: JSON.parse(body) }); } catch (e) {}
-            }
-        }
-        return jsonBlocks;
+    function toggleAccordion(id) {
+        const body = document.getElementById(id);
+        const header = body.previousElementSibling;
+        body.classList.toggle('expanded');
+        header.classList.toggle('expanded');
     }
 
-    function extractMatchedBraces(content, start) {
-        let count = 0, found = false, res = '';
-        for (let i = start; i < content.length; i++) {
-            if (content[i] === '{') { count++; found = true; }
-            else if (content[i] === '}') count--;
-            if (found) { res += content[i]; if (count === 0) return res; }
-        }
-        return null;
-    }
+    document.getElementById('filter-mismatch').addEventListener('change', (e) => {
+        showMismatchOnly = e.target.checked;
+        renderSidebar();
+    });
 
     function mapBlocksByLabelAndKey(blocks) {
         const map = new Map(), counts = new Map();
@@ -610,23 +825,6 @@
         return null;
     }
 
-    function getDiff(obj1, obj2, ignore, path = '') {
-        let diffs = [];
-        if (_.isObject(obj1) && _.isObject(obj2)) {
-            const keys = _.union(_.keys(obj1), _.keys(obj2));
-            keys.forEach(key => {
-                const curPath = path ? `${path}.${key}` : key;
-                if (ignore.includes(key)) return;
-                if (!_.has(obj1, key)) diffs.push({ path: curPath, type: 'ADDED' });
-                else if (!_.has(obj2, key)) diffs.push({ path: curPath, type: 'REMOVED' });
-                else diffs = diffs.concat(getDiff(obj1[key], obj2[key], ignore, curPath));
-            });
-        } else if (obj1 !== obj2) {
-            diffs.push({ path, type: 'CHANGED' });
-        }
-        return diffs;
-    }
-
     function parseMetadata(content) {
         const map = new Map();
         content.split(/\r?\n/).forEach(line => {
@@ -641,12 +839,10 @@
         if (!file) return;
         const content = await file.text();
         metadataMap = parseMetadata(content);
-        
         const statusEl = document.getElementById('upload-status');
         statusEl.style.display = 'block';
         statusEl.className = 'badge-s badge-match';
         statusEl.innerText = `Metadata Loaded: ${metadataMap.size} items`;
-        
         if (selectedIdx !== -1) selectDto(selectedIdx);
     }
 

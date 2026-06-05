@@ -185,6 +185,7 @@
         .diff-added { background-color: var(--diff-added) !important; color: #166534; }
         .diff-removed { background-color: var(--diff-removed) !important; color: #991b1b; text-decoration: line-through; }
         .diff-changed { background-color: var(--diff-changed) !important; color: #92400e; }
+        .diff-ignored { background-color: #f5f3ff !important; color: #6d28d9; border: 1px dashed #c4b5fd !important; }
 
         .key-text { color: var(--text-main); font-weight: 500; margin-right: 8px; }
         .key-kr { color: var(--text-muted); font-size: 11px; margin-left: 4px; font-weight: 400; }
@@ -271,6 +272,10 @@
                 <button class="btn btn-outline-secondary btn-sm text-start" onclick="document.getElementById('upload-qa').click()">
                     <small>TO-BE Log</small>
                     <input type="file" id="upload-qa" hidden accept=".txt,.log" onchange="processUploadedFiles()">
+                </button>
+                <button class="btn btn-outline-secondary btn-sm text-start" onclick="document.getElementById('upload-meta').click()">
+                    <small>항목 정의 (TSV)</small>
+                    <input type="file" id="upload-meta" hidden accept=".tsv,.txt" onchange="uploadMetadataFile()">
                 </button>
                 <button class="btn btn-primary btn-sm mt-2 fw-600" onclick="processUploadedFiles()">🚀 Start Comparison</button>
             </div>
@@ -629,6 +634,20 @@
             if (cols.length >= 2) map.set(cols[1].trim(), cols[0].trim());
         });
         return map;
+    }
+
+    async function uploadMetadataFile() {
+        const file = document.getElementById('upload-meta').files[0];
+        if (!file) return;
+        const content = await file.text();
+        metadataMap = parseMetadata(content);
+        
+        const statusEl = document.getElementById('upload-status');
+        statusEl.style.display = 'block';
+        statusEl.className = 'badge-s badge-match';
+        statusEl.innerText = `Metadata Loaded: ${metadataMap.size} items`;
+        
+        if (selectedIdx !== -1) selectDto(selectedIdx);
     }
 
     async function processUploadedFiles() {
